@@ -29,7 +29,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+        <div className="min-h-screen flex flex-col font-sans transition-colors duration-150">
           <div className="min-h-screen flex flex-col">
             <BrowserRouter>
               <Routes>

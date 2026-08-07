@@ -76,7 +76,14 @@ html.light .bg-slate-800 { background-color: #cbd5e1 !important; }
 html.light .border-slate-800, html.light .border-slate-700 { border-color: #cbd5e1 !important; }
 
 /* Dark Theme: Deep Dark Page (#090d16) + Whiter/Lighter Data Display Spaces (#1e293b / #273549) */
-html.dark, html.dark body {
+html.dark, html.dark body, html.dark #root {
+  background-color: #090d16 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-white {
   background-color: #090d16 !important;
   color: #f8fafc !important;
 }
