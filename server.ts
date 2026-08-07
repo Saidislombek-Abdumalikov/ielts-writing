@@ -44,13 +44,15 @@ async function seedDatabase() {
   }
 }
 
-async function startServer() {
+let appInstance: express.Express | null = null;
+
+export async function createApp() {
+  if (appInstance) return appInstance;
+
   await initDbSchema();
   await seedDatabase();
   
   const app = express();
-  const PORT = 3000;
-
   app.use(express.json({ limit: '50mb' }));
 
   // Check health
@@ -658,6 +660,14 @@ async function startServer() {
     }
   });
 
+  appInstance = app;
+  return app;
+}
+
+export async function startServer() {
+  const app = await createApp();
+  const PORT = process.env.PORT || 3000;
+
   // Catch-all 404 for API endpoints so Vite SPA fallback never serves HTML for API requests
   app.use('/api/*', (req, res) => {
     res.status(404).json({ error: `API route ${req.originalUrl} not found` });
@@ -683,9 +693,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}

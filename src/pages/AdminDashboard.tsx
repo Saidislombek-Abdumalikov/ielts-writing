@@ -6,7 +6,7 @@ import { UserPlus, Users, Edit2, Trash2, Shield, AlertCircle, LogIn } from 'luci
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function AdminDashboard() {
-  const { dbUser, impersonateUser } = useAuth();
+  const { dbUser } = useAuth();
   const [usersList, setUsersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -96,7 +96,7 @@ export default function AdminDashboard() {
             User Account Management
           </h2>
           <p className="text-sm text-slate-400">
-            Enter any teacher or student account to view their exact workspace.
+            Manage teacher and student user accounts, usernames, and login credentials.
           </p>
         </div>
 
@@ -236,20 +236,9 @@ export default function AdminDashboard() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
-                  {dbUser?.role === 'admin' && u.id !== dbUser?.id && (
-                    <button 
-                      onClick={() => impersonateUser(u.id)}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold flex items-center transition-colors"
-                      title={`Enter ${u.role} account (${u.name})`}
-                    >
-                      <LogIn className="w-3.5 h-3.5 mr-1" />
-                      Enter Account
-                    </button>
-                  )}
-
                   <button 
                     onClick={() => handleStartEdit(u)}
-                    className="text-slate-400 hover:text-white transition-colors"
+                    className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
                     title="Edit Credentials"
                   >
                     <Edit2 className="w-4 h-4" />

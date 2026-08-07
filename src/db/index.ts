@@ -7,8 +7,8 @@ import * as schema from './schema';
 
 dotenv.config();
 
-// Ensure local database folder exists
-const dataDir = path.join(process.cwd(), '.data');
+// Ensure local database folder exists (/tmp on Vercel serverless, .data locally)
+const dataDir = process.env.VERCEL ? path.join('/tmp', '.data') : path.join(process.cwd(), '.data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }

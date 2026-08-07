@@ -99,6 +99,10 @@ html.light .gradient-text {
   transform: translateY(-1px);
 }
 
+html.light .text-slate-100 {
+  color: #0f172a;
+}
+
 html.light .text-slate-400 {
   color: #64748b;
 }
@@ -111,6 +115,10 @@ html.light .text-slate-200 {
   color: #1e293b;
 }
 
+html.light .bg-slate-950 {
+  background-color: #f8fafc;
+}
+
 html.light .bg-slate-900 {
   background-color: #f1f5f9;
 }
@@ -120,7 +128,11 @@ html.light .bg-slate-800 {
 }
 
 html.light .border-slate-800 {
-  border-color: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+html.light textarea {
+  color: #0f172a !important;
 }
 
 @keyframes fadeUp {

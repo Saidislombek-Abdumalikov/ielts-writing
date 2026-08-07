@@ -19,6 +19,7 @@ export default function TaskWorkspace() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [toastNotification, setToastNotification] = useState<string>('');
   
   // Silent auto-save ref
   const lastSavedContentRef = useRef<string>('');
@@ -119,19 +120,29 @@ export default function TaskWorkspace() {
     return () => clearTimeout(autoSaveTimer);
   }, [content, id, pasteAttempts, suspiciousBurst, submission]);
 
-  // STRICT ANTI-PASTE HANDLER
+  // STRICT ANTI-PASTE, ANTI-CUT, ANTI-COPY HANDLERS
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     setPasteAttempts(prev => prev + 1);
     setSuspiciousBurst(true);
   };
 
+  const handleCut = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+  };
+
+  const handleCopy = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Block Ctrl+V / Cmd+V
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+    // Block Ctrl+V / Cmd+V (Paste), Ctrl+X / Cmd+X (Cut), Ctrl+C / Cmd+C (Copy)
+    if ((e.ctrlKey || e.metaKey) && ['v', 'V', 'x', 'X', 'c', 'C'].includes(e.key)) {
       e.preventDefault();
-      setPasteAttempts(prev => prev + 1);
-      setSuspiciousBurst(true);
+      if (['v', 'V'].includes(e.key)) {
+        setPasteAttempts(prev => prev + 1);
+        setSuspiciousBurst(true);
+      }
       return;
     }
 
@@ -166,6 +177,8 @@ export default function TaskWorkspace() {
       });
       setSubmission({ ...res, status: 'submitted' });
       lastSavedContentRef.current = content;
+      setToastNotification('🎉 Essay successfully submitted! Your teacher has received your response and will evaluate it soon.');
+      setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
       // If submission failed, allow auto-saves again
       isSubmittedRef.current = false;
@@ -298,16 +311,6 @@ export default function TaskWorkspace() {
 
             <h1 className="text-xl sm:text-2xl font-bold">{task.title}</h1>
 
-            {task.imageUrl && (
-              <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/50 p-2">
-                <img 
-                  src={task.imageUrl} 
-                  alt="Task visual" 
-                  className="w-full h-auto max-h-72 object-contain rounded-lg"
-                />
-              </div>
-            )}
-
             <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap">
               {task.promptText}
             </div>
@@ -319,23 +322,58 @@ export default function TaskWorkspace() {
             </div>
           </div>
 
+          {/* Toast Notification Banner */}
+          {toastNotification && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass-card p-4 rounded-2xl border-emerald-500/40 bg-emerald-500/10 text-xs sm:text-sm text-emerald-200 flex items-center shadow-xl font-medium"
+            >
+              <CheckCircle className="w-5 h-5 mr-3 text-emerald-400 shrink-0" />
+              <span>{toastNotification}</span>
+            </motion.div>
+          )}
+
+          {/* Submission Submitted & Pending Teacher Feedback Status */}
+          {submission?.status === 'submitted' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-4 rounded-2xl border-amber-500/30 bg-amber-500/10 text-xs sm:text-sm text-amber-200 flex items-center justify-between"
+            >
+              <div className="flex items-center space-x-3">
+                <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <span className="font-semibold block text-amber-300">Submission Delivered</span>
+                  <span className="text-xs text-amber-200/80">Your essay has been sent to your teacher. Evaluation will appear here once graded.</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Feedback Section if Graded */}
           {submission?.status === 'graded' && submission.feedback && submission.feedback.length > 0 && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-6 rounded-2xl space-y-4 border-indigo-500/40"
+              className="glass-card p-6 rounded-2xl space-y-4 border-emerald-500/50 bg-emerald-950/20 shadow-2xl relative overflow-hidden"
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold flex items-center text-indigo-300">
-                  <Sparkles className="w-5 h-5 mr-2 text-indigo-400" />
-                  Teacher Evaluation
-                </h3>
-                <div className="px-4 py-1.5 rounded-xl bg-indigo-600 text-white font-extrabold text-lg">
+                <div className="flex items-center space-x-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <h3 className="text-lg font-bold flex items-center text-emerald-300">
+                    <Sparkles className="w-5 h-5 mr-2 text-emerald-400" />
+                    Teacher Evaluation Feedback
+                  </h3>
+                </div>
+                <div className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-lg shadow-lg">
                   Band {submission.feedback[0].bandScore}
                 </div>
               </div>
-              <div className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+              <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-900/60 p-4 rounded-xl border border-slate-800">
                 {submission.feedback[0].comments}
               </div>
             </motion.div>
@@ -367,6 +405,8 @@ export default function TaskWorkspace() {
               value={content}
               onChange={e => !isReadOnly && setContent(e.target.value)}
               onPaste={handlePaste}
+              onCut={handleCut}
+              onCopy={handleCopy}
               onContextMenu={e => e.preventDefault()}
               onKeyDown={handleKeyDown}
               disabled={isReadOnly}

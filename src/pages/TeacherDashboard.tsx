@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Plus, Users, Search, Edit2, Trash2, Upload, Calendar, Image as ImageIcon } from 'lucide-react';
+import { Plus, Users, Search, Edit2, Trash2, Calendar } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function TeacherDashboard() {
@@ -17,7 +17,6 @@ export default function TeacherDashboard() {
     ieltsType: 'task2',
     assignmentMode: 'full',
     focusLabel: '',
-    imageUrl: '',
     promptText: '',
     timerMinutes: 40,
     startDate: new Date().toISOString().slice(0, 16),
@@ -34,17 +33,6 @@ export default function TeacherDashboard() {
   useEffect(() => {
     loadTasks();
   }, []);
-
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewTask(prev => ({ ...prev, imageUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const handleCreateOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +53,6 @@ export default function TeacherDashboard() {
       ieltsType: task.ieltsType,
       assignmentMode: task.assignmentMode || 'full',
       focusLabel: task.focusLabel || '',
-      imageUrl: task.imageUrl || '',
       promptText: task.promptText,
       timerMinutes: task.timerMinutes || 40,
       startDate: task.startDate ? new Date(task.startDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
@@ -185,49 +172,9 @@ export default function TeacherDashboard() {
               </div>
             </div>
             
-            <div className="h-full flex flex-col space-y-4">
-              {/* Photo Upload & Preview */}
-              <div>
-                <label className="block text-sm text-slate-400 mb-1 flex items-center justify-between">
-                  <span className="flex items-center">
-                    <ImageIcon className="w-4 h-4 mr-1 text-indigo-400" /> Photo Upload / Visual (Task 1)
-                  </span>
-                  <span className="text-xs text-slate-500">Photo file or Image URL</span>
-                </label>
-                
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <label className="cursor-pointer gradient-btn px-4 py-2 rounded-lg text-xs font-medium flex items-center justify-center shrink-0">
-                    <Upload className="w-3.5 h-3.5 mr-1.5" />
-                    Upload Photo
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
-                  </label>
-                  <input 
-                    type="text" 
-                    className="w-full glass-input px-4 py-2 rounded-lg text-xs" 
-                    value={newTask.imageUrl} 
-                    onChange={e => setNewTask({...newTask, imageUrl: e.target.value})} 
-                    placeholder="Or paste image URL (https://...)" 
-                  />
-                </div>
-
-                {newTask.imageUrl && (
-                  <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-800 h-28 bg-slate-900 flex items-center justify-center">
-                    <img src={newTask.imageUrl} alt="Uploaded chart preview" className="h-full object-contain" />
-                    <button 
-                      type="button" 
-                      onClick={() => setNewTask({ ...newTask, imageUrl: '' })}
-                      className="absolute top-1 right-1 bg-red-500/80 text-white rounded-full p-1 text-xs hover:bg-red-600"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex-1 flex flex-col">
-                <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
-                <textarea required className="w-full h-full min-h-[140px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact essay prompt..." />
-              </div>
+            <div className="flex flex-col">
+              <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
+              <textarea required className="w-full h-full min-h-[160px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact essay prompt..." />
             </div>
           </div>
           
@@ -259,7 +206,6 @@ export default function TeacherDashboard() {
                 <tr key={task.id} className="hover:bg-slate-800/20 transition-colors">
                   <td className="px-6 py-4 font-medium">
                     <div>{task.title}</div>
-                    {task.imageUrl && <span className="text-[11px] text-indigo-400 font-normal">📷 Visual Image Attached</span>}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-2">

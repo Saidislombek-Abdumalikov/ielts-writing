@@ -13,7 +13,12 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Request failed with status ${response.status}`);
+    const message = typeof errorData.error === 'string' 
+      ? errorData.error 
+      : typeof errorData.message === 'string'
+      ? errorData.message
+      : `Request failed with status ${response.status}`;
+    throw new Error(message);
   }
 
   return response.json();

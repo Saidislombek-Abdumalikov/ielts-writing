@@ -12,11 +12,29 @@ export default function StudentDashboard() {
     api.get('/api/tasks').then(setTasks);
   }, []);
 
+  const gradedTasksCount = tasks.filter(t => t.submission?.status === 'graded').length;
+
   return (
     <div className="space-y-8 animate-fade-up">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight mb-2">Student Workspace</h2>
-        <p className="text-slate-400">Select an assignment to start writing or view feedback.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight mb-2">Student Workspace</h2>
+          <p className="text-slate-400">Select an assignment to start writing or view teacher feedback.</p>
+        </div>
+
+        {gradedTasksCount > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card px-4 py-2.5 rounded-2xl border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold flex items-center shadow-lg"
+          >
+            <span className="relative flex h-2.5 w-2.5 mr-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            🔔 {gradedTasksCount} {gradedTasksCount === 1 ? 'Assignment' : 'Assignments'} Graded with Teacher Feedback!
+          </motion.div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
