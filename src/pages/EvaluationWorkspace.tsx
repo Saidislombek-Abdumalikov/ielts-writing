@@ -7,6 +7,21 @@ import {
   Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX 
 } from 'lucide-react';
 
+function getTimeSpent(sub: any) {
+  if (!sub) return 'N/A';
+  const start = sub.createdAt ? new Date(sub.createdAt).getTime() : 0;
+  const end = sub.submittedAt ? new Date(sub.submittedAt).getTime() : sub.updatedAt ? new Date(sub.updatedAt).getTime() : 0;
+  if (!start || !end || end <= start) return '< 1m';
+
+  const diffSecs = Math.max(1, Math.floor((end - start) / 1000));
+  const mins = Math.floor(diffSecs / 60);
+  const secs = diffSecs % 60;
+
+  if (mins === 0) return `${secs}s`;
+  if (secs === 0) return `${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
 export default function EvaluationWorkspace() {
   const { id: taskId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -267,8 +282,12 @@ export default function EvaluationWorkspace() {
 
                     <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
                       <span>{sub.wordCount || 0} words</span>
-                      <span className="flex items-center text-[11px] font-medium text-slate-300">
-                        <Clock className="w-3 h-3 mr-1 text-indigo-400 inline shrink-0" />
+                      <span className="text-indigo-400 font-semibold">⏱️ {getTimeSpent(sub)}</span>
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Finished:</span>
+                      <span className="font-medium text-slate-300">
                         {sub.submittedAt 
                           ? new Date(sub.submittedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
                           : sub.updatedAt 
@@ -322,21 +341,24 @@ export default function EvaluationWorkspace() {
 
         {/* Right Side: Evaluation Workspace */}
         {selectedSub && activeTab === 'submissions' ? (
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-4">
             {/* Student Submission View */}
-            <div className="glass-card p-6 rounded-2xl space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div className="glass-card p-4 rounded-2xl space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div>
-                  <h2 className="text-xl font-bold">{selectedSub.student.name}</h2>
+                  <h2 className="text-lg font-bold">{selectedSub.student.name}</h2>
                   <p className="text-xs text-slate-400">@{selectedSub.student.username}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="glass-card px-3 py-1.5 rounded-xl flex items-center font-medium text-slate-200">
-                    <Clock className="w-3.5 h-3.5 mr-1.5 text-indigo-400 shrink-0" />
-                    Finished: <strong className="text-indigo-400 ml-1">{selectedSub.submission.submittedAt ? new Date(selectedSub.submission.submittedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'In Draft'}</strong>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="glass-card px-2.5 py-1 rounded-lg flex items-center font-medium text-slate-200">
+                    <Clock className="w-3.5 h-3.5 mr-1 text-indigo-400 shrink-0" />
+                    Time Spent: <strong className="text-indigo-400 ml-1 font-bold">{getTimeSpent(selectedSub.submission)}</strong>
                   </span>
-                  <span className="glass-card px-3 py-1.5 rounded-xl">Words: <strong className="text-indigo-400">{selectedSub.submission.wordCount}</strong></span>
-                  <span className="glass-card px-3 py-1.5 rounded-xl">Status: <strong className="text-indigo-400 capitalize">{selectedSub.submission.status}</strong></span>
+                  <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">
+                    Finished: <strong className="text-indigo-400 ml-1">{selectedSub.submission.submittedAt ? new Date(selectedSub.submission.submittedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'In Draft'}</strong>
+                  </span>
+                  <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">Words: <strong className="text-indigo-400">{selectedSub.submission.wordCount}</strong></span>
+                  <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">Status: <strong className="text-indigo-400 capitalize">{selectedSub.submission.status}</strong></span>
                 </div>
               </div>
 
@@ -357,14 +379,14 @@ export default function EvaluationWorkspace() {
             </div>
 
             {/* Evaluation Form */}
-            <form onSubmit={handleSubmitFeedback} className="glass-card p-6 rounded-2xl space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold flex items-center">
-                  <Award className="w-5 h-5 mr-2 text-indigo-400" />
+            <form onSubmit={handleSubmitFeedback} className="glass-card p-4 rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <h3 className="text-base font-bold flex items-center">
+                  <Award className="w-4 h-4 mr-2 text-indigo-400" />
                   Teacher Evaluation & Scoring
                 </h3>
                 {selectedSub.submission.status === 'graded' && (
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 w-fit">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 w-fit">
                     Editing Previously Published Feedback
                   </span>
                 )}
