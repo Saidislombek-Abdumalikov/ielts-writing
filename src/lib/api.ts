@@ -12,13 +12,32 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = typeof errorData.error === 'string' 
-      ? errorData.error 
-      : typeof errorData.message === 'string'
-      ? errorData.message
-      : `Request failed with status ${response.status}`;
-    throw new Error(message);
+    let errorMessage = '';
+    try {
+      const errorData = await response.clone().json();
+      errorMessage = typeof errorData.error === 'string'
+        ? errorData.error
+        : typeof errorData.message === 'string'
+        ? errorData.message
+        : '';
+    } catch {
+      try {
+        const textData = await response.clone().text();
+        if (textData && !textData.startsWith('<!DOCTYPE')) {
+          errorMessage = textData;
+        }
+      } catch {}
+    }
+
+    if (!errorMessage) {
+      if (response.status === 500) {
+        errorMessage = 'Server Error (500): Unable to process request. Please check server logs or database credentials.';
+      } else {
+        errorMessage = `Request failed with status ${response.status}`;
+      }
+    }
+
+    throw new Error(errorMessage);
   }
 
   return response.json();

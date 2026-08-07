@@ -93,9 +93,13 @@ export async function initDbSchema() {
     );
   `;
 
-  if (poolInstance) {
-    await poolInstance.query(sql);
-  } else if (pgliteInstance) {
-    await pgliteInstance.exec(sql);
+  try {
+    if (poolInstance) {
+      await poolInstance.query(sql);
+    } else if (pgliteInstance) {
+      await pgliteInstance.exec(sql);
+    }
+  } catch (err) {
+    console.error('Database schema initialization warning:', err);
   }
 }

@@ -382,18 +382,37 @@ export async function createApp() {
         return;
       }
       
+      const { title, ieltsType, assignmentMode, focusLabel, promptText, imageUrl, timerMinutes, minTimerMinutes, startDate, dueDate } = req.body;
+      if (!title || !promptText || !dueDate) {
+        res.status(400).json({ error: 'Title, prompt text, and due date are required' });
+        return;
+      }
+
+      const parsedDueDate = new Date(dueDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        res.status(400).json({ error: 'Invalid due date format' });
+        return;
+      }
+      
       const newTask = await db.insert(tasks).values({
-        ...req.body,
         teacherId: user.id,
-        startDate: req.body.startDate ? new Date(req.body.startDate) : null,
-        dueDate: new Date(req.body.dueDate)
+        title,
+        ieltsType: ieltsType || 'task2',
+        assignmentMode: assignmentMode || 'full',
+        focusLabel: focusLabel || null,
+        promptText,
+        imageUrl: imageUrl || null,
+        timerMinutes: timerMinutes ? Number(timerMinutes) : 40,
+        minTimerMinutes: minTimerMinutes ? Number(minTimerMinutes) : null,
+        startDate: startDate ? new Date(startDate) : null,
+        dueDate: parsedDueDate
       }).returning();
       
       await syncDb();
       res.json(newTask[0]);
     } catch (error: any) {
       console.error('Failed to create task:', error);
-      res.status(500).json({ error: 'Failed to create task' });
+      res.status(500).json({ error: error?.message || 'Failed to create task' });
     }
   });
 
@@ -408,16 +427,26 @@ export async function createApp() {
       }
       
       const taskId = parseInt(req.params.id);
-      const updatedTask = await db.update(tasks).set({
-        ...req.body,
-        startDate: req.body.startDate ? new Date(req.body.startDate) : null,
-        dueDate: new Date(req.body.dueDate)
-      }).where(eq(tasks.id, taskId)).returning();
+      const { title, ieltsType, assignmentMode, focusLabel, promptText, imageUrl, timerMinutes, minTimerMinutes, startDate, dueDate } = req.body;
+      
+      const updatePayload: any = {};
+      if (title !== undefined) updatePayload.title = title;
+      if (ieltsType !== undefined) updatePayload.ieltsType = ieltsType;
+      if (assignmentMode !== undefined) updatePayload.assignmentMode = assignmentMode;
+      if (focusLabel !== undefined) updatePayload.focusLabel = focusLabel;
+      if (promptText !== undefined) updatePayload.promptText = promptText;
+      if (imageUrl !== undefined) updatePayload.imageUrl = imageUrl;
+      if (timerMinutes !== undefined) updatePayload.timerMinutes = Number(timerMinutes);
+      if (minTimerMinutes !== undefined) updatePayload.minTimerMinutes = Number(minTimerMinutes);
+      if (startDate !== undefined) updatePayload.startDate = startDate ? new Date(startDate) : null;
+      if (dueDate !== undefined) updatePayload.dueDate = new Date(dueDate);
+
+      const updatedTask = await db.update(tasks).set(updatePayload).where(eq(tasks.id, taskId)).returning();
       
       res.json(updatedTask[0]);
     } catch (error: any) {
       console.error('Failed to update task:', error);
-      res.status(500).json({ error: 'Failed to update task' });
+      res.status(500).json({ error: error?.message || 'Failed to update task' });
     }
   });
 
