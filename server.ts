@@ -113,7 +113,7 @@ export async function createApp() {
       res.json({ token, user: safeUser });
     } catch (error: any) {
       console.error('Login error:', error);
-      res.status(500).json({ error: 'Login failed' });
+      res.status(500).json({ error: error?.message || 'Login failed' });
     }
   });
 
