@@ -93,13 +93,13 @@ export async function createApp() {
       }
       const user = await getUserByUsername(username);
       if (!user) {
-        res.status(401).json({ error: 'Invalid username or password' });
+        res.status(401).json({ error: 'User does not exist. Please check your username.' });
         return;
       }
       
       const isValid = await bcrypt.compare(password, user.passwordHash);
       if (!isValid) {
-        res.status(401).json({ error: 'Invalid username or password' });
+        res.status(401).json({ error: 'Incorrect password. Please try again.' });
         return;
       }
       
