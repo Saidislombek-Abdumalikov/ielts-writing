@@ -247,7 +247,7 @@ export default function EvaluationWorkspace() {
           </div>
 
           {activeTab === 'submissions' ? (
-            <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+            <div className="space-y-2">
               {submissionsList.map(item => {
                 const sub = item.submission;
                 const student = item.student;
@@ -256,20 +256,20 @@ export default function EvaluationWorkspace() {
                 return (
                   <motion.div 
                     key={sub.id}
-                    whileHover={{ scale: 1.01 }}
+                    whileHover={{ scale: 1.005 }}
                     onClick={() => handleSelectSubmission(item)}
-                    className={`glass-card p-4 rounded-xl cursor-pointer transition-all border ${
+                    className={`glass-card p-2.5 rounded-xl cursor-pointer transition-all border ${
                       isSelected 
-                        ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' 
+                        ? 'border-indigo-500 bg-indigo-500/10 shadow-md' 
                         : 'border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-semibold text-slate-200">{student.name}</h4>
-                        <p className="text-[11px] text-slate-400">@{student.username}</p>
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center space-x-1.5 truncate mr-2">
+                        <h4 className="font-semibold text-xs text-slate-200 truncate">{student.name}</h4>
+                        <span className="text-[10px] text-slate-400 truncate">@{student.username}</span>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 ${
                         sub.status === 'graded' 
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
                           : sub.status === 'submitted'
@@ -280,26 +280,20 @@ export default function EvaluationWorkspace() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/50">
                       <span>{sub.wordCount || 0} words</span>
                       <span className="text-indigo-400 font-semibold">⏱️ {getTimeSpent(sub)}</span>
-                    </div>
-
-                    <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>Finished:</span>
-                      <span className="font-medium text-slate-300">
+                      <span className="text-slate-300">
                         {sub.submittedAt 
-                          ? new Date(sub.submittedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) 
-                          : sub.updatedAt 
-                          ? new Date(sub.updatedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                          ? new Date(sub.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
                           : 'Drafting'}
                       </span>
                     </div>
 
                     {(sub.pasteAttemptCount > 0 || sub.suspiciousBurstFlag) && (
-                      <div className="mt-2 text-[11px] text-amber-400 flex items-center">
-                        <ShieldAlert className="w-3 h-3 mr-1" />
-                        Integrity Flags Detected
+                      <div className="mt-1 text-[10px] text-amber-400 flex items-center">
+                        <ShieldAlert className="w-3 h-3 mr-1 shrink-0" />
+                        Integrity Flags
                       </div>
                     )}
                   </motion.div>
@@ -307,22 +301,22 @@ export default function EvaluationWorkspace() {
               })}
 
               {submissionsList.length === 0 && (
-                <div className="glass-card p-8 text-center text-slate-400 rounded-2xl text-xs">
+                <div className="glass-card p-6 text-center text-slate-400 rounded-xl text-xs">
                   No student has submitted this assignment yet.
                 </div>
               )}
             </div>
           ) : (
             /* Missing Students List */
-            <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+            <div className="space-y-2">
               {missingStudents.map(student => (
-                <div key={student.id} className="glass-card p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-semibold text-slate-200">{student.name}</h4>
-                      <p className="text-xs text-slate-400">@{student.username}</p>
+                <div key={student.id} className="glass-card p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                  <div className="flex justify-between items-center text-xs">
+                    <div className="truncate mr-2">
+                      <h4 className="font-semibold text-slate-200 truncate">{student.name}</h4>
+                      <p className="text-[10px] text-slate-400 truncate">@{student.username}</p>
                     </div>
-                    <span className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 text-xs font-semibold">
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-semibold shrink-0">
                       Not Sent
                     </span>
                   </div>

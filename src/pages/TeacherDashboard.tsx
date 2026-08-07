@@ -12,6 +12,13 @@ export default function TeacherDashboard() {
   const [editingTask, setEditingTask] = useState<number | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
   
+  const getTwoDaysFromNowString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const defaultTask = {
     title: '',
     ieltsType: 'task2',
@@ -20,7 +27,7 @@ export default function TeacherDashboard() {
     promptText: '',
     timerMinutes: 40,
     startDate: new Date().toISOString().slice(0, 16),
-    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+    dueDate: getTwoDaysFromNowString()
   };
   
   const [newTask, setNewTask] = useState(defaultTask);
