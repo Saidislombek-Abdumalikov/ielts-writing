@@ -49,6 +49,17 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-xl glass-card hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-200"
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-600" />
+            )}
+          </button>
 
           <span className="text-sm text-slate-300 capitalize font-medium flex items-center">
             <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>
