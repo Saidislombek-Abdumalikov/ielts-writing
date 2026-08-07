@@ -6,37 +6,44 @@
   }
 }
 
-/* Light Theme (Clean High-Contrast White — Zero Glows) */
+/* Light Theme: Pure White Page (#ffffff) + Darker Data Display Spaces (#f1f5f9 / #e2e8f0) */
 html.light, html.light body {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
 html.light .glass-card {
-  background-color: #ffffff !important;
-  border: 1px solid #e2e8f0 !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+  background-color: #f1f5f9 !important; /* Darker background contrast for data spaces */
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06) !important;
   backdrop-filter: none !important;
 }
 
 html.light .glass-card-hover:hover {
-  border-color: #cbd5e1 !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07) !important;
+  background-color: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08) !important;
 }
 
 html.light .glass-header {
   background-color: #ffffff !important;
-  border-bottom: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #cbd5e1 !important;
   backdrop-filter: none !important;
 }
 
-html.light .glass-input {
-  background-color: #ffffff !important;
+html.light .glass-input, 
+html.light textarea, 
+html.light input, 
+html.light select {
+  background-color: #e2e8f0 !important; /* Darker input data space */
   border: 1px solid #cbd5e1 !important;
   color: #0f172a !important;
 }
 
-html.light .glass-input:focus {
+html.light .glass-input:focus, 
+html.light textarea:focus, 
+html.light input:focus {
+  background-color: #ffffff !important;
   border-color: #4f46e5 !important;
   box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2) !important;
   outline: none !important;
@@ -63,42 +70,49 @@ html.light .text-slate-100, html.light .text-slate-200 { color: #0f172a !importa
 html.light .text-slate-300 { color: #1e293b !important; }
 html.light .text-slate-400 { color: #475569 !important; }
 html.light .text-slate-500 { color: #64748b !important; }
-html.light .bg-slate-950, html.light .bg-slate-900 { background-color: #f1f5f9 !important; }
-html.light .bg-slate-900\/80, html.light .bg-slate-900\/60 { background-color: #ffffff !important; }
-html.light .bg-slate-800 { background-color: #f1f5f9 !important; }
-html.light .border-slate-800, html.light .border-slate-700 { border-color: #e2e8f0 !important; }
+html.light .bg-slate-950, html.light .bg-slate-900 { background-color: #e2e8f0 !important; }
+html.light .bg-slate-900\/80, html.light .bg-slate-900\/60 { background-color: #e2e8f0 !important; }
+html.light .bg-slate-800 { background-color: #cbd5e1 !important; }
+html.light .border-slate-800, html.light .border-slate-700 { border-color: #cbd5e1 !important; }
 
-/* Dark Theme (Clean High-Contrast Dark — Zero Glows) */
+/* Dark Theme: Deep Dark Page (#090d16) + Whiter/Lighter Data Display Spaces (#1e293b / #273549) */
 html.dark, html.dark body {
-  background-color: #0f172a !important;
+  background-color: #090d16 !important;
   color: #f8fafc !important;
 }
 
 html.dark .glass-card {
-  background-color: #1e293b !important;
+  background-color: #1e293b !important; /* Whiter/lighter background contrast for data spaces */
   border: 1px solid #334155 !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
   backdrop-filter: none !important;
 }
 
 html.dark .glass-card-hover:hover {
+  background-color: #273549 !important;
   border-color: #475569 !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4) !important;
 }
 
 html.dark .glass-header {
-  background-color: #1e293b !important;
+  background-color: #0f172a !important;
   border-bottom: 1px solid #334155 !important;
   backdrop-filter: none !important;
 }
 
-html.dark .glass-input {
-  background-color: #0f172a !important;
+html.dark .glass-input, 
+html.dark textarea, 
+html.dark input, 
+html.dark select {
+  background-color: #1e293b !important; /* Whiter/lighter input data space */
   border: 1px solid #334155 !important;
   color: #f8fafc !important;
 }
 
-html.dark .glass-input:focus {
+html.dark .glass-input:focus, 
+html.dark textarea:focus, 
+html.dark input:focus {
+  background-color: #263345 !important;
   border-color: #6366f1 !important;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
   outline: none !important;
@@ -125,8 +139,8 @@ html.dark .text-slate-100, html.dark .text-slate-200 { color: #f8fafc !important
 html.dark .text-slate-300 { color: #cbd5e1 !important; }
 html.dark .text-slate-400 { color: #94a3b8 !important; }
 html.dark .text-slate-500 { color: #64748b !important; }
-html.dark .bg-slate-950, html.dark .bg-slate-900 { background-color: #0f172a !important; }
-html.dark .bg-slate-900\/80, html.dark .bg-slate-900\/60 { background-color: #1e293b !important; }
+html.dark .bg-slate-950, html.dark .bg-slate-900 { background-color: #1e293b !important; }
+html.dark .bg-slate-900\/80, html.dark .bg-slate-900\/60 { background-color: #263345 !important; }
 html.dark .bg-slate-800 { background-color: #334155 !important; }
 html.dark .border-slate-800, html.dark .border-slate-700 { border-color: #334155 !important; }
 

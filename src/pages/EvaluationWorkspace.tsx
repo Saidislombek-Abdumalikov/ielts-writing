@@ -157,7 +157,7 @@ export default function EvaluationWorkspace() {
   const notSubmittedCount = totalStudents - submittedCount;
 
   return (
-    <div className="space-y-6 animate-fade-up max-w-7xl mx-auto pb-12 px-2 sm:px-4">
+    <div className="space-y-6 animate-fade-up w-full max-w-[95%] lg:max-w-[90%] mx-auto pb-12 px-2 sm:px-4">
       {/* Top Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <button 

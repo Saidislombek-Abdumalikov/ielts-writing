@@ -75,7 +75,7 @@ export default function Dashboard() {
         </div>
       </header>
       
-      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 w-full max-w-[95%] lg:max-w-[90%] mx-auto">
         {dbUser?.role === 'admin' && (
           <>
             {adminTab === 'teacher' && <TeacherDashboard />}
