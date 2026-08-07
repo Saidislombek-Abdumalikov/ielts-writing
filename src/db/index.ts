@@ -9,18 +9,27 @@ import * as schema from './schema';
 
 dotenv.config();
 
-let pgliteInstance: PGlite | null = null;
+let pgliteInstance: any = null;
 let poolInstance: pg.Pool | null = null;
 export let db: any;
 
-if (process.env.DATABASE_URL) {
+const dbUrl = process.env.DATABASE_URL;
+
+if (dbUrl) {
   poolInstance = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    connectionString: dbUrl,
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
   });
   db = drizzlePg({ client: poolInstance, schema });
+} else if (process.env.VERCEL) {
+  console.warn('[DB] WARNING: DATABASE_URL is missing in Vercel Environment Variables!');
+  // On Vercel, PGlite WASM cannot run in serverless containers. Create pool connection lazily or error gracefully.
+  db = null;
 } else {
-  const dataDir = process.env.VERCEL ? path.join('/tmp', '.data') : path.join(process.cwd(), '.data');
+  const dataDir = path.join(process.cwd(), '.data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
@@ -93,13 +102,17 @@ export async function initDbSchema() {
     );
   `;
 
+  if (!poolInstance && !pgliteInstance && process.env.VERCEL) {
+    throw new Error('DATABASE_URL environment variable is missing on Vercel. Please add your Supabase DATABASE_URL in Vercel -> Settings -> Environment Variables.');
+  }
+
   try {
     if (poolInstance) {
       await poolInstance.query(sql);
     } else if (pgliteInstance) {
       await pgliteInstance.exec(sql);
     }
-  } catch (err) {
-    console.error('Database schema initialization warning:', err);
+  } catch (err: any) {
+    console.error('Database schema initialization warning:', err?.message || err);
   }
 }
