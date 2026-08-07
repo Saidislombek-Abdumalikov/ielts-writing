@@ -29,14 +29,8 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="relative overflow-x-hidden min-h-screen">
-          <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-            <div className="animate-pulse absolute -top-40 -left-40 h-96 w-96 rounded-full bg-indigo-600/20 blur-[120px]" style={{ animationDuration: '8s' }} />
-            <div className="animate-pulse absolute top-1/3 -right-40 h-96 w-96 rounded-full bg-purple-600/20 blur-[140px]" style={{ animationDelay: "-3s", animationDuration: '10s' }} />
-            <div className="animate-pulse absolute -bottom-40 left-1/3 h-[30rem] w-[30rem] rounded-full bg-blue-600/15 blur-[160px]" style={{ animationDelay: "-5s", animationDuration: '12s' }} />
-          </div>
-          
-          <div className="relative z-10 min-h-screen flex flex-col">
+        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+          <div className="min-h-screen flex flex-col">
             <BrowserRouter>
               <Routes>
                 <Route path="/login" element={<Login />} />
