@@ -127,21 +127,56 @@ export default function TaskWorkspace() {
     setSuspiciousBurst(true);
   };
 
-  const handleCut = (e: React.ClipboardEvent) => {
+  const handleCut = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
+    const target = e.currentTarget;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+
+    if (start !== null && end !== null && start !== end) {
+      const newContent = content.substring(0, start) + content.substring(end);
+      setContent(newContent);
+      setTimeout(() => {
+        target.selectionStart = start;
+        target.selectionEnd = start;
+      }, 0);
+    }
   };
 
   const handleCopy = (e: React.ClipboardEvent) => {
     e.preventDefault();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Block Ctrl+V / Cmd+V (Paste), Ctrl+X / Cmd+X (Cut), Ctrl+C / Cmd+C (Copy)
-    if ((e.ctrlKey || e.metaKey) && ['v', 'V', 'x', 'X', 'c', 'C'].includes(e.key)) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const hasSelection = start !== null && end !== null && start !== end;
+
+    // Block Ctrl+C / Cmd+C (Copy) -> No clipboard copy
+    if ((e.ctrlKey || e.metaKey) && ['c', 'C'].includes(e.key)) {
       e.preventDefault();
-      if (['v', 'V'].includes(e.key)) {
-        setPasteAttempts(prev => prev + 1);
-        setSuspiciousBurst(true);
+      return;
+    }
+
+    // Block Ctrl+V / Cmd+V (Paste) -> Anti-paste
+    if ((e.ctrlKey || e.metaKey) && ['v', 'V'].includes(e.key)) {
+      e.preventDefault();
+      setPasteAttempts(prev => prev + 1);
+      setSuspiciousBurst(true);
+      return;
+    }
+
+    // Handle Ctrl+X / Cmd+X (Cut) -> Delete selected area without copying to clipboard
+    if ((e.ctrlKey || e.metaKey) && ['x', 'X'].includes(e.key)) {
+      e.preventDefault();
+      if (hasSelection) {
+        const newContent = content.substring(0, start) + content.substring(end);
+        setContent(newContent);
+        setTimeout(() => {
+          target.selectionStart = start;
+          target.selectionEnd = start;
+        }, 0);
       }
       return;
     }
