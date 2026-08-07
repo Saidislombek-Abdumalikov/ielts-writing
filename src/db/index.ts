@@ -1,5 +1,7 @@
-import { drizzle } from 'drizzle-orm/pglite';
+import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { PGlite } from '@electric-sql/pglite';
+import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -7,29 +9,37 @@ import * as schema from './schema';
 
 dotenv.config();
 
-// Ensure local database folder exists (/tmp on Vercel serverless, .data locally)
-const dataDir = process.env.VERCEL ? path.join('/tmp', '.data') : path.join(process.cwd(), '.data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+let pgliteInstance: PGlite | null = null;
+let poolInstance: pg.Pool | null = null;
+export let db: any;
+
+if (process.env.DATABASE_URL) {
+  poolInstance = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  db = drizzlePg({ client: poolInstance, schema });
+} else {
+  const dataDir = process.env.VERCEL ? path.join('/tmp', '.data') : path.join(process.cwd(), '.data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  pgliteInstance = new PGlite(path.join(dataDir, 'local.db'));
+  db = drizzlePglite({ client: pgliteInstance, schema });
 }
 
-// Embedded PGlite instance for seamless zero-dependency local execution
-export const pglite = new PGlite(path.join(dataDir, 'local.db'));
-
-export const db = drizzle({ client: pglite, schema });
-
-// Force WAL flush to disk so data survives server restarts
 export async function syncDb() {
-  try {
-    await pglite.exec('CHECKPOINT');
-  } catch {
-    // Ignore checkpoint errors
+  if (pgliteInstance) {
+    try {
+      await pgliteInstance.exec('CHECKPOINT');
+    } catch {
+      // Ignore checkpoint errors
+    }
   }
 }
 
-// Auto-initialize schema tables if they don't exist
 export async function initDbSchema() {
-  await pglite.exec(`
+  const sql = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -81,5 +91,11 @@ export async function initDbSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
     );
-  `);
+  `;
+
+  if (poolInstance) {
+    await poolInstance.query(sql);
+  } else if (pgliteInstance) {
+    await pgliteInstance.exec(sql);
+  }
 }
