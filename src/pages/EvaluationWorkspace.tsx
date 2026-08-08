@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { api } from '../lib/api';
+import { useAuth } from '../components/AuthContext';
+import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
@@ -24,6 +25,7 @@ function getTimeSpent(sub: any) {
 
 export default function EvaluationWorkspace() {
   const { id: taskId } = useParams<{ id: string }>();
+  const { dbUser } = useAuth();
   const navigate = useNavigate();
 
   const [task, setTask] = useState<any>(null);
@@ -33,7 +35,7 @@ export default function EvaluationWorkspace() {
   const [submittedCount, setSubmittedCount] = useState<number>(0);
 
   const [selectedSub, setSelectedSub] = useState<any>(null);
-  const selectedSubIdRef = useRef<number | null>(null);
+  const selectedSubIdRef = useRef<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'submissions' | 'missing'>('submissions');
   const [loading, setLoading] = useState(true);
@@ -52,10 +54,10 @@ export default function EvaluationWorkspace() {
       if (isInitial) setLoading(true);
       else setRefreshing(true);
 
-      const taskData = await api.get(`/api/tasks/${taskId}`);
+      const taskData = await getTaskById(taskId);
       setTask(taskData);
 
-      const data = await api.get(`/api/tasks/${taskId}/submissions`);
+      const data = await getTaskSubmissions(taskId);
       const subs = data.submissions || [];
       setSubmissionsList(subs);
       setMissingStudents(data.missingStudents || []);
@@ -101,15 +103,17 @@ export default function EvaluationWorkspace() {
     return () => clearInterval(interval);
   }, [taskId]);
 
-  const loadExistingFeedback = async (subId: number) => {
+  const loadExistingFeedback = async (subId: string) => {
     try {
-      const fb = await api.get(`/api/submissions/${subId}/feedback`);
+      const fb = await getFeedbackForSubmission(subId);
       if (fb) {
         setBandScore(parseFloat(fb.bandScore) || 6.5);
         setComments(fb.comments || '');
+      } else {
+        setBandScore(6.5);
+        setComments('');
       }
     } catch {
-      // No feedback yet
       setBandScore(6.5);
       setComments('');
     }
@@ -125,15 +129,12 @@ export default function EvaluationWorkspace() {
 
   const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSub) return;
+    if (!selectedSub || !dbUser) return;
 
     try {
       setSubmittingFeedback(true);
       setError('');
-      await api.post(`/api/submissions/${selectedSub.submission.id}/feedback`, {
-        bandScore,
-        comments
-      });
+      await submitFeedback(selectedSub.submission.id, dbUser.id, bandScore.toString(), comments);
       
       setFeedbackSuccess('Feedback successfully published!');
       setTimeout(() => setFeedbackSuccess(''), 3000);
@@ -309,7 +310,7 @@ export default function EvaluationWorkspace() {
           ) : (
             /* Missing Students List */
             <div className="space-y-2">
-              {missingStudents.map(student => (
+              {missingStudents.map((student: any) => (
                 <div key={student.id} className="glass-card p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5">
                   <div className="flex justify-between items-center text-xs">
                     <div className="truncate mr-2">

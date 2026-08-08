@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { useAuth } from '../components/AuthContext';
+import { getAllTasks, createTask, updateTask, deleteTask } from '../lib/db';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Plus, Users, Search, Edit2, Trash2, Calendar } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function TeacherDashboard() {
+  const { dbUser } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [editingTask, setEditingTask] = useState<number | null>(null);
-  const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   
   const getTwoDaysFromNowString = () => {
     const d = new Date();
@@ -33,8 +35,9 @@ export default function TeacherDashboard() {
   const [newTask, setNewTask] = useState(defaultTask);
   const navigate = useNavigate();
 
-  const loadTasks = () => {
-    api.get('/api/tasks').then(setTasks);
+  const loadTasks = async () => {
+    const t = await getAllTasks();
+    setTasks(t);
   };
 
   useEffect(() => {
@@ -44,9 +47,9 @@ export default function TeacherDashboard() {
   const handleCreateOrUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingTask) {
-      await api.put(`/api/tasks/${editingTask}`, newTask);
+      await updateTask(editingTask, newTask);
     } else {
-      await api.post('/api/tasks', newTask);
+      await createTask(dbUser!.id, newTask);
     }
     setShowCreate(false);
     setEditingTask(null);
@@ -71,7 +74,7 @@ export default function TeacherDashboard() {
 
   const handleConfirmDelete = async () => {
     if (deleteTaskId) {
-      await api.delete(`/api/tasks/${deleteTaskId}`);
+      await deleteTask(deleteTaskId);
       setDeleteTaskId(null);
       loadTasks();
     }
@@ -162,7 +165,6 @@ export default function TeacherDashboard() {
                 <input type="number" required className="w-full glass-input px-4 py-2 rounded-lg text-sm" value={newTask.timerMinutes} onChange={e => setNewTask({...newTask, timerMinutes: parseInt(e.target.value)})} />
               </div>
 
-              {/* Start & Finish Date Pickers */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-slate-400 mb-1 flex items-center">
@@ -270,7 +272,6 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* In-App Delete Task Modal */}
       <ConfirmModal 
         isOpen={deleteTaskId !== null}
         title="Delete Assignment"

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { api } from '../lib/api';
+import { useAuth } from '../components/AuthContext';
+import { getTaskById, getStudentSubmissionWithFeedback, upsertSubmission } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
@@ -10,6 +11,7 @@ import ConfirmModal from '../components/ConfirmModal';
 
 export default function TaskWorkspace() {
   const { id } = useParams<{ id: string }>();
+  const { dbUser } = useAuth();
   const navigate = useNavigate();
   
   const [task, setTask] = useState<any>(null);
@@ -34,11 +36,12 @@ export default function TaskWorkspace() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !dbUser) return;
     async function loadWorkspace() {
       try {
         setLoading(true);
-        const taskData = await api.get(`/api/tasks/${id}`);
+        const taskData = await getTaskById(id!);
+        if (!taskData) { setError('Task not found'); return; }
         setTask(taskData);
         
         if (taskData.timerMinutes) {
@@ -46,13 +49,15 @@ export default function TaskWorkspace() {
         }
 
         try {
-          const subData = await api.get(`/api/submissions/${id}/me`);
-          setSubmission(subData);
-          const initialText = subData.content || '';
-          setContent(initialText);
-          lastSavedContentRef.current = initialText;
-          setPasteAttempts(subData.pasteAttemptCount || 0);
-          setSuspiciousBurst(subData.suspiciousBurstFlag || false);
+          const subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
+          if (subData) {
+            setSubmission(subData);
+            const initialText = subData.content || '';
+            setContent(initialText);
+            lastSavedContentRef.current = initialText;
+            setPasteAttempts(subData.pasteAttemptCount || 0);
+            setSuspiciousBurst(subData.suspiciousBurstFlag || false);
+          }
         } catch {
           // No submission yet
         }
@@ -63,7 +68,7 @@ export default function TaskWorkspace() {
       }
     }
     loadWorkspace();
-  }, [id]);
+  }, [id, dbUser]);
 
   // Countdown timer
   useEffect(() => {
@@ -77,10 +82,9 @@ export default function TaskWorkspace() {
     return () => clearInterval(timer);
   }, [timeLeft, submission]);
 
-  // Ref to immediately block auto-saves on submit (avoids React state batching delay)
+  // Ref to immediately block auto-saves on submit
   const isSubmittedRef = useRef(false);
 
-  // Keep ref in sync with submission state
   useEffect(() => {
     if (submission?.status === 'submitted' || submission?.status === 'graded') {
       isSubmittedRef.current = true;
@@ -89,25 +93,23 @@ export default function TaskWorkspace() {
 
   // Background Auto-Save Every 2.5 Seconds
   useEffect(() => {
-    if (!id) return;
+    if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
     if (submission?.status === 'submitted' || submission?.status === 'graded') return;
     if (content === lastSavedContentRef.current) return;
 
     const autoSaveTimer = setTimeout(async () => {
-      // Double-check ref right before sending (in case submit happened during timeout)
       if (isSubmittedRef.current) return;
 
       try {
         const wc = content.trim() ? content.trim().split(/\s+/).length : 0;
-        const res = await api.post(`/api/submissions/${id}`, {
+        const res = await upsertSubmission(id!, dbUser!.id, {
           content,
           wordCount: wc,
           pasteAttemptCount: pasteAttempts,
           suspiciousBurstFlag: suspiciousBurst,
           status: 'draft'
         });
-        // Only update submission state if we haven't submitted in the meantime
         if (!isSubmittedRef.current) {
           setSubmission(res);
         }
@@ -118,7 +120,7 @@ export default function TaskWorkspace() {
     }, 2500);
 
     return () => clearTimeout(autoSaveTimer);
-  }, [content, id, pasteAttempts, suspiciousBurst, submission]);
+  }, [content, id, dbUser, pasteAttempts, suspiciousBurst, submission]);
 
   // STRICT ANTI-PASTE, ANTI-CUT, ANTI-COPY HANDLERS
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -153,13 +155,11 @@ export default function TaskWorkspace() {
     const end = target.selectionEnd;
     const hasSelection = start !== null && end !== null && start !== end;
 
-    // Block Ctrl+C / Cmd+C (Copy) -> No clipboard copy
     if ((e.ctrlKey || e.metaKey) && ['c', 'C'].includes(e.key)) {
       e.preventDefault();
       return;
     }
 
-    // Block Ctrl+V / Cmd+V (Paste) -> Anti-paste
     if ((e.ctrlKey || e.metaKey) && ['v', 'V'].includes(e.key)) {
       e.preventDefault();
       setPasteAttempts(prev => prev + 1);
@@ -167,7 +167,6 @@ export default function TaskWorkspace() {
       return;
     }
 
-    // Handle Ctrl+X / Cmd+X (Cut) -> Delete selected area without copying to clipboard
     if ((e.ctrlKey || e.metaKey) && ['x', 'X'].includes(e.key)) {
       e.preventDefault();
       if (hasSelection) {
@@ -196,14 +195,13 @@ export default function TaskWorkspace() {
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
 
   const handleConfirmSubmit = async () => {
-    if (!id) return;
+    if (!id || !dbUser) return;
     setShowConfirmSubmit(false);
-    // Immediately block all future auto-saves
     isSubmittedRef.current = true;
     try {
       setSubmitting(true);
       const calculatedWordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-      const res = await api.post(`/api/submissions/${id}`, {
+      const res = await upsertSubmission(id, dbUser.id, {
         content,
         wordCount: calculatedWordCount,
         pasteAttemptCount: pasteAttempts,
@@ -215,7 +213,6 @@ export default function TaskWorkspace() {
       setToastNotification('🎉 Essay successfully submitted! Your teacher has received your response and will evaluate it soon.');
       setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
-      // If submission failed, allow auto-saves again
       isSubmittedRef.current = false;
       setError(err.message || 'Failed to submit response');
     } finally {

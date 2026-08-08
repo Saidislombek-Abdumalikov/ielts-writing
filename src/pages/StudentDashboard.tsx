@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api.ts';
+import { useAuth } from '../components/AuthContext.tsx';
+import { getTasksForStudent } from '../lib/db';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { BookOpen, Clock, CheckCircle, ArrowRight } from 'lucide-react';
 
 export default function StudentDashboard() {
+  const { dbUser } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/api/tasks').then(setTasks);
-  }, []);
+    if (dbUser) {
+      getTasksForStudent(dbUser.id).then(setTasks);
+    }
+  }, [dbUser]);
 
   const gradedTasksCount = tasks.filter(t => t.submission?.status === 'graded').length;
 

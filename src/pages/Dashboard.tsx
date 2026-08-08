@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { useTheme } from '../components/ThemeContext';
-import { api } from '../lib/api';
 import TeacherDashboard from './TeacherDashboard';
 import StudentDashboard from './StudentDashboard';
 import AdminDashboard from './AdminDashboard';

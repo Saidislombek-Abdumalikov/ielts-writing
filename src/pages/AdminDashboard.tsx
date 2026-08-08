@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api';
 import { useAuth } from '../components/AuthContext';
+import { getAllUsers, createUser, updateUser, deleteUser } from '../lib/db';
 import { motion } from 'motion/react';
 import { UserPlus, Users, Edit2, Trash2, Shield, AlertCircle, LogIn } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
@@ -10,8 +10,8 @@ export default function AdminDashboard() {
   const [usersList, setUsersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [deleteUser, setDeleteUser] = useState<{ id: number; username: string } | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [deleteUserData, setDeleteUserData] = useState<{ id: string; username: string } | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -26,8 +26,13 @@ export default function AdminDashboard() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const data = await api.get('/api/users');
-      setUsersList(data);
+      const data = await getAllUsers();
+      // Filter based on role
+      if (dbUser?.role === 'teacher') {
+        setUsersList(data.filter(u => u.role === 'student'));
+      } else {
+        setUsersList(data);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch users');
     } finally {
@@ -46,10 +51,14 @@ export default function AdminDashboard() {
 
     try {
       if (editingUserId) {
-        await api.put(`/api/users/${editingUserId}`, formData);
+        await updateUser(editingUserId, formData);
         setSuccess('User account updated successfully');
       } else {
-        await api.post('/api/auth/register', formData);
+        if (!formData.password) {
+          setError('Password is required for new accounts');
+          return;
+        }
+        await createUser(formData);
         setSuccess('User account created successfully');
       }
       setShowCreate(false);
@@ -67,23 +76,23 @@ export default function AdminDashboard() {
     setFormData({
       name: u.name,
       username: u.username,
-      password: '', // Blank unless changing
+      password: '',
       role: u.role
     });
     setShowCreate(true);
   };
 
   const handleConfirmDeleteUser = async () => {
-    if (!deleteUser) return;
+    if (!deleteUserData) return;
     try {
-      await api.delete(`/api/users/${deleteUser.id}`);
-      setSuccess(`User ${deleteUser.username} deleted`);
-      setDeleteUser(null);
+      await deleteUser(deleteUserData.id);
+      setSuccess(`User ${deleteUserData.username} deleted`);
+      setDeleteUserData(null);
       loadUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to delete user');
-      setDeleteUser(null);
+      setDeleteUserData(null);
     }
   };
 
@@ -128,7 +137,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Account Creation / Edit Form */}
       {showCreate && (
         <motion.form 
           initial={{ opacity: 0, height: 0 }}
@@ -208,7 +216,6 @@ export default function AdminDashboard() {
         </motion.form>
       )}
 
-      {/* Users Table */}
       <div className="glass-card rounded-2xl overflow-x-auto">
         <table className="w-full text-left border-collapse text-sm min-w-[550px]">
           <thead>
@@ -246,7 +253,7 @@ export default function AdminDashboard() {
 
                   {dbUser?.role === 'admin' && u.id !== dbUser?.id && (
                     <button 
-                      onClick={() => setDeleteUser({ id: u.id, username: u.username })}
+                      onClick={() => setDeleteUserData({ id: u.id, username: u.username })}
                       className="text-red-400 hover:text-red-300 transition-colors"
                       title="Delete User"
                     >
@@ -268,16 +275,15 @@ export default function AdminDashboard() {
         </table>
       </div>
 
-      {/* In-App Delete User Modal */}
       <ConfirmModal 
-        isOpen={deleteUser !== null}
+        isOpen={deleteUserData !== null}
         title="Delete Account"
-        message={`Are you sure you want to delete the user account "${deleteUser?.username}"? All submissions associated with this account will be removed.`}
+        message={`Are you sure you want to delete the user account "${deleteUserData?.username}"? All submissions associated with this account will be removed.`}
         confirmText="Delete Account"
         cancelText="Cancel"
         variant="danger"
         onConfirm={handleConfirmDeleteUser}
-        onCancel={() => setDeleteUser(null)}
+        onCancel={() => setDeleteUserData(null)}
       />
     </div>
   );

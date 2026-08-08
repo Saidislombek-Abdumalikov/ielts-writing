@@ -3,10 +3,9 @@ import { useAuth } from '../components/AuthContext.tsx';
 import { useNavigate } from 'react-router';
 import { BookOpen } from 'lucide-react';
 import { motion } from 'motion/react';
-import { api } from '../lib/api.ts';
 
 export default function Login() {
-  const { dbUser, signIn, loading } = useAuth();
+  const { dbUser, login, loading } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -25,8 +24,7 @@ export default function Login() {
     setError('');
     try {
       const cleanUsername = formData.username.trim();
-      const data = await api.post('/api/auth/login', { username: cleanUsername, password: formData.password });
-      signIn(data.token, data.user);
+      await login(cleanUsername, formData.password);
     } catch (err: any) {
       setError(err.message || 'Authentication failed. Please check your credentials.');
     }
