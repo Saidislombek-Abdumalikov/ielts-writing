@@ -334,6 +334,20 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
   }
 }
 
+export async function updateSubmissionByTeacher(subId: string, data: Partial<{ content: string; status: string; wordCount: number }>): Promise<void> {
+  const updateData: any = {
+    updatedAt: Timestamp.fromDate(new Date()),
+  };
+  if (data.content !== undefined) {
+    updateData.content = data.content;
+    updateData.wordCount = data.content.trim() ? data.content.trim().split(/\s+/).length : 0;
+  }
+  if (data.status !== undefined) {
+    updateData.status = data.status;
+  }
+  await updateDoc(doc(firestore, 'submissions', subId), updateData);
+}
+
 export async function getTaskSubmissions(taskId: string): Promise<{ submissions: any[]; totalStudents: number; submittedCount: number; missingStudents: any[] }> {
   // Get all students
   const allUsersSnap = await getDocs(usersCol());

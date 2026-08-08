@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
-import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback } from '../lib/db';
+import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback, updateSubmissionByTeacher } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
-  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX 
+  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X
 } from 'lucide-react';
 
 function getTimeSpent(sub: any) {
@@ -47,6 +47,12 @@ export default function EvaluationWorkspace() {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
   const [error, setError] = useState('');
+
+  // Teacher direct editing & unlock state
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const [teacherContent, setTeacherContent] = useState('');
+  const [savingContent, setSavingContent] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState('');
 
   const fetchSubmissionsData = async (isInitial = false) => {
     if (!taskId) return;
@@ -123,7 +129,10 @@ export default function EvaluationWorkspace() {
     setSelectedSub(subItem);
     selectedSubIdRef.current = subItem.submission.id;
     setFeedbackSuccess('');
+    setActionSuccess('');
     setError('');
+    setIsEditingContent(false);
+    setTeacherContent(subItem.submission.content || '');
     loadExistingFeedback(subItem.submission.id);
   };
 
@@ -144,6 +153,36 @@ export default function EvaluationWorkspace() {
       setError(err.message || 'Failed to submit feedback');
     } finally {
       setSubmittingFeedback(false);
+    }
+  };
+
+  const handleUnlockForStudent = async () => {
+    if (!selectedSub) return;
+    try {
+      setError('');
+      await updateSubmissionByTeacher(selectedSub.submission.id, { status: 'draft' });
+      setActionSuccess(`🔓 Unlocked for ${selectedSub.student.name}! The student can now edit and resubmit their response.`);
+      setTimeout(() => setActionSuccess(''), 5000);
+      fetchSubmissionsData(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to unlock submission');
+    }
+  };
+
+  const handleSaveTeacherContent = async () => {
+    if (!selectedSub) return;
+    try {
+      setSavingContent(true);
+      setError('');
+      await updateSubmissionByTeacher(selectedSub.submission.id, { content: teacherContent });
+      setIsEditingContent(false);
+      setActionSuccess('✏️ Essay content updated successfully!');
+      setTimeout(() => setActionSuccess(''), 4000);
+      fetchSubmissionsData(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update essay content');
+    } finally {
+      setSavingContent(false);
     }
   };
 
@@ -337,24 +376,77 @@ export default function EvaluationWorkspace() {
         {/* Right Side: Evaluation Workspace */}
         {selectedSub && activeTab === 'submissions' ? (
           <div className="lg:col-span-8 space-y-4">
-            {/* Student Submission View */}
+            {/* Action success alert */}
+            {actionSuccess && (
+              <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs rounded-xl flex items-center shadow-md">
+                <CheckCircle className="w-4 h-4 mr-2 shrink-0" />
+                <span>{actionSuccess}</span>
+              </div>
+            )}
+
+            {/* Student Submission View Header & Actions */}
             <div className="glass-card p-4 rounded-2xl space-y-3">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="text-lg font-bold">{selectedSub.student.name}</h2>
                   <p className="text-xs text-slate-400">@{selectedSub.student.username}</p>
                 </div>
+                
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="glass-card px-2.5 py-1 rounded-lg flex items-center font-medium text-slate-200">
                     <Clock className="w-3.5 h-3.5 mr-1 text-indigo-400 shrink-0" />
                     Time Spent: <strong className="text-indigo-400 ml-1 font-bold">{getTimeSpent(selectedSub.submission)}</strong>
                   </span>
-                  <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">
-                    Finished: <strong className="text-indigo-400 ml-1">{selectedSub.submission.submittedAt ? new Date(selectedSub.submission.submittedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'In Draft'}</strong>
-                  </span>
                   <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">Words: <strong className="text-indigo-400">{selectedSub.submission.wordCount}</strong></span>
                   <span className="glass-card px-2.5 py-1 rounded-lg text-slate-300">Status: <strong className="text-indigo-400 capitalize">{selectedSub.submission.status}</strong></span>
                 </div>
+              </div>
+
+              {/* Action Buttons for Teacher: Unlock for Student & Edit Content */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center space-x-2">
+                  {(selectedSub.submission.status === 'submitted' || selectedSub.submission.status === 'graded') && (
+                    <button
+                      type="button"
+                      onClick={handleUnlockForStudent}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-semibold flex items-center transition-colors shadow-sm"
+                      title="Unlock this essay so the student can edit and resubmit"
+                    >
+                      <Unlock className="w-3.5 h-3.5 mr-1.5" />
+                      Allow Student to Edit (Unlock)
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isEditingContent) {
+                        setTeacherContent(selectedSub.submission.content || '');
+                      }
+                      setIsEditingContent(!isEditingContent);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center transition-colors border shadow-sm ${
+                      isEditingContent 
+                        ? 'bg-slate-800 text-slate-300 border-slate-700' 
+                        : 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border-indigo-500/30'
+                    }`}
+                  >
+                    {isEditingContent ? <X className="w-3.5 h-3.5 mr-1.5" /> : <Edit3 className="w-3.5 h-3.5 mr-1.5" />}
+                    {isEditingContent ? 'Cancel Direct Edit' : 'Edit Essay Content'}
+                  </button>
+                </div>
+
+                {isEditingContent && (
+                  <button
+                    type="button"
+                    onClick={handleSaveTeacherContent}
+                    disabled={savingContent}
+                    className="gradient-btn px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center shadow-md disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {savingContent ? 'Saving...' : 'Save Text Changes'}
+                  </button>
+                )}
               </div>
 
               {/* Anti-cheat alerts */}
@@ -367,10 +459,22 @@ export default function EvaluationWorkspace() {
                 </div>
               )}
 
-              {/* Essay Text */}
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-200 text-sm leading-relaxed min-h-[250px] whitespace-pre-wrap font-mono">
-                {selectedSub.submission.content || <em className="text-slate-500">No content submitted yet.</em>}
-              </div>
+              {/* Essay Text View OR Teacher Edit View */}
+              {isEditingContent ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-indigo-300 font-medium">✏️ Editing {selectedSub.student.name}'s essay content directly as teacher:</p>
+                  <textarea 
+                    rows={12}
+                    className="w-full glass-input p-4 rounded-xl text-slate-100 text-sm font-mono leading-relaxed resize-none focus:outline-none"
+                    value={teacherContent}
+                    onChange={e => setTeacherContent(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-200 text-sm leading-relaxed min-h-[250px] whitespace-pre-wrap font-mono">
+                  {selectedSub.submission.content || <em className="text-slate-500">No content submitted yet.</em>}
+                </div>
+              )}
             </div>
 
             {/* Evaluation Form */}
