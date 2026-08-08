@@ -349,14 +349,15 @@ export async function updateSubmissionByTeacher(subId: string, data: Partial<{ c
 }
 
 export async function getTaskSubmissions(taskId: string): Promise<{ submissions: any[]; totalStudents: number; submittedCount: number; missingStudents: any[] }> {
-  // Get all students
-  const allUsersSnap = await getDocs(usersCol());
+  // Fetch users and task submissions concurrently in parallel
+  const [allUsersSnap, subsSnap] = await Promise.all([
+    getDocs(usersCol()),
+    getDocs(query(subsCol(), where('taskId', '==', taskId)))
+  ]);
+
   const allUsers = allUsersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const allStudents = allUsers.filter((u: any) => u.role?.toLowerCase() === 'student');
 
-  // Get submissions for this task
-  const q = query(subsCol(), where('taskId', '==', taskId));
-  const subsSnap = await getDocs(q);
   const taskSubmissions = subsSnap.docs.map(d => ({
     id: d.id, ...d.data(),
     submittedAt: toDate(d.data().submittedAt),
@@ -445,11 +446,12 @@ export async function submitFeedback(submissionId: string, teacherId: string, ba
 // ============== TASKS WITH STUDENT SUBMISSIONS ==============
 
 export async function getTasksForStudent(studentId: string): Promise<any[]> {
-  const tasks = await getAllTasks();
-  
-  // Get all submissions for this student
-  const q = query(subsCol(), where('studentId', '==', studentId));
-  const subsSnap = await getDocs(q);
+  // Fetch tasks and student submissions concurrently in parallel
+  const [tasks, subsSnap] = await Promise.all([
+    getAllTasks(),
+    getDocs(query(subsCol(), where('studentId', '==', studentId)))
+  ]);
+
   const studentSubs = subsSnap.docs.map(d => ({
     id: d.id, ...d.data(),
     submittedAt: toDate(d.data().submittedAt),
@@ -457,27 +459,33 @@ export async function getTasksForStudent(studentId: string): Promise<any[]> {
     updatedAt: toDateRequired(d.data().updatedAt),
   }));
 
-  // Build a map by taskId
   const subMap = new Map<string, any>();
+  const gradedSubIds: string[] = [];
+
   for (const s of studentSubs) {
-    subMap.set((s as any).taskId, s);
+    const taskId = (s as any).taskId;
+    subMap.set(taskId, s);
+    if ((s as any).status === 'graded') {
+      gradedSubIds.push(s.id);
+    }
   }
 
-  // Get feedback for graded submissions
-  const result = [];
-  for (const task of tasks) {
+  // Fetch all feedback for graded submissions concurrently in parallel
+  const feedbacks = await Promise.all(gradedSubIds.map(id => getFeedbackForSubmission(id)));
+  
+  const fbMap = new Map<string, any>();
+  feedbacks.forEach(fb => {
+    if (fb) fbMap.set(fb.submissionId, fb);
+  });
+
+  return tasks.map(task => {
     const sub = subMap.get(task.id) || null;
-    let feedback = null;
-    if (sub && sub.status === 'graded') {
-      feedback = await getFeedbackForSubmission(sub.id);
-    }
-    result.push({
+    const feedback = sub ? (fbMap.get(sub.id) || null) : null;
+    return {
       ...task,
       submission: sub ? { ...sub, feedback } : null,
-    });
-  }
-
-  return result;
+    };
+  });
 }
 
 // Get student submission with feedback for TaskWorkspace
