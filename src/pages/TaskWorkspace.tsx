@@ -48,8 +48,9 @@ export default function TaskWorkspace() {
           setTimeLeft(taskData.timerMinutes * 60);
         }
 
+        let subData: any = null;
         try {
-          const subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
+          subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
           if (subData) {
             setSubmission(subData);
             const initialText = subData.content || '';
@@ -61,6 +62,23 @@ export default function TaskWorkspace() {
         } catch {
           // No submission yet
         }
+
+        if (taskData.timerMinutes) {
+          const storageKey = `task_timer_start_${id!}_${dbUser!.id}`;
+          const nowMs = Date.now();
+          let startTimeMs = localStorage.getItem(storageKey);
+
+          if (!startTimeMs) {
+            const subCreatedMs = subData?.createdAt ? new Date(subData.createdAt).getTime() : null;
+            startTimeMs = (subCreatedMs || nowMs).toString();
+            localStorage.setItem(storageKey, startTimeMs);
+          }
+
+          const elapsedSecs = Math.floor((nowMs - parseInt(startTimeMs, 10)) / 1000);
+          const totalSecs = taskData.timerMinutes * 60;
+          const remainingSecs = Math.max(0, totalSecs - elapsedSecs);
+          setTimeLeft(remainingSecs);
+        }
       } catch (err: any) {
         setError(err.message || 'Failed to load task');
       } finally {
@@ -70,13 +88,26 @@ export default function TaskWorkspace() {
     loadWorkspace();
   }, [id, dbUser]);
 
-  // Countdown timer
+  // Countdown timer with auto-submit when timer reaches 0
   useEffect(() => {
     if (timeLeft === null || submission?.status === 'submitted' || submission?.status === 'graded') return;
-    if (timeLeft <= 0) return;
+    
+    if (timeLeft <= 0) {
+      // Auto-submit essay if timer expires and essay hasn't been submitted yet
+      if (!isSubmittedRef.current && content.trim()) {
+        handleConfirmSubmit();
+      }
+      return;
+    }
 
     const timer = setInterval(() => {
-      setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+      setTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
