@@ -1,6 +1,5 @@
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
-import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
@@ -26,9 +25,9 @@ if (dbUrl) {
   db = drizzlePg({ client: poolInstance, schema });
 } else if (process.env.VERCEL) {
   console.warn('[DB] WARNING: DATABASE_URL is missing in Vercel Environment Variables!');
-  // On Vercel, PGlite WASM cannot run in serverless containers. Create pool connection lazily or error gracefully.
   db = null;
 } else {
+  const { PGlite } = require('@electric-sql/pglite');
   const dataDir = path.join(process.cwd(), '.data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
