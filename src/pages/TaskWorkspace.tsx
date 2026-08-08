@@ -129,37 +129,26 @@ export default function TaskWorkspace() {
     setSuspiciousBurst(true);
   };
 
-  const handleCut = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+  const handleCut = (e: React.ClipboardEvent | React.SyntheticEvent) => {
     e.preventDefault();
-    const target = e.currentTarget;
-    const start = target.selectionStart;
-    const end = target.selectionEnd;
-
-    if (start !== null && end !== null && start !== end) {
-      const newContent = content.substring(0, start) + content.substring(end);
-      setContent(newContent);
-      setTimeout(() => {
-        target.selectionStart = start;
-        target.selectionEnd = start;
-      }, 0);
-    }
   };
 
   const handleCopy = (e: React.ClipboardEvent) => {
     e.preventDefault();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const target = e.currentTarget;
-    const start = target.selectionStart;
-    const end = target.selectionEnd;
-    const hasSelection = start !== null && end !== null && start !== end;
+  const handleDragDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Block Ctrl+C / Cmd+C (Copy)
     if ((e.ctrlKey || e.metaKey) && ['c', 'C'].includes(e.key)) {
       e.preventDefault();
       return;
     }
 
+    // Block Ctrl+V / Cmd+V (Paste)
     if ((e.ctrlKey || e.metaKey) && ['v', 'V'].includes(e.key)) {
       e.preventDefault();
       setPasteAttempts(prev => prev + 1);
@@ -167,16 +156,9 @@ export default function TaskWorkspace() {
       return;
     }
 
+    // Block Ctrl+X / Cmd+X (Cut)
     if ((e.ctrlKey || e.metaKey) && ['x', 'X'].includes(e.key)) {
       e.preventDefault();
-      if (hasSelection) {
-        const newContent = content.substring(0, start) + content.substring(end);
-        setContent(newContent);
-        setTimeout(() => {
-          target.selectionStart = start;
-          target.selectionEnd = start;
-        }, 0);
-      }
       return;
     }
 
@@ -343,7 +325,7 @@ export default function TaskWorkspace() {
 
             <h1 className="text-xl sm:text-2xl font-bold">{task.title}</h1>
 
-            <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap">
+            <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
               {task.promptText}
             </div>
 
@@ -439,6 +421,8 @@ export default function TaskWorkspace() {
               onPaste={handlePaste}
               onCut={handleCut}
               onCopy={handleCopy}
+              onDrop={handleDragDrop}
+              onDragStart={handleDragDrop}
               onContextMenu={e => e.preventDefault()}
               onKeyDown={handleKeyDown}
               disabled={isReadOnly}
