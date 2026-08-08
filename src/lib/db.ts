@@ -77,11 +77,26 @@ function toDateRequired(v: any): Date {
 
 // Simple password hashing (client-side, good enough for a classroom app)
 export async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + '_ielts_salt_2024');
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password + '_ielts_salt_2024');
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {
+    console.warn('crypto.subtle unavailable, using fallback hash:', e);
+  }
+  // Fallback string transformation if crypto.subtle is unavailable
+  let hash = 0;
+  const str = password + '_ielts_salt_2024';
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return 'fallback_' + Math.abs(hash).toString(16);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {

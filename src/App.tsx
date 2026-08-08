@@ -11,7 +11,12 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 
   const { dbUser, loading } = useAuth();
   
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-300">
+        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p className="text-xs text-slate-400">Loading IELTS Workspace...</p>
+      </div>
+    );
   }
   
   if (!dbUser) {
@@ -37,6 +42,7 @@ export default function App() {
                 <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/tasks/:id" element={<ProtectedRoute role="student"><TaskWorkspace /></ProtectedRoute>} />
                 <Route path="/teacher/submissions/:id" element={<ProtectedRoute role="teacher"><EvaluationWorkspace /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </BrowserRouter>
           </div>

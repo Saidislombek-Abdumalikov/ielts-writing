@@ -39,34 +39,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    async function init() {
-      // Seed default accounts on first load
-      try {
-        await seedDefaultAccounts();
-      } catch (e) {
-        console.error('Seed error:', e);
-      }
+    let mounted = true;
 
-      // Restore session from localStorage
-      const savedUserId = localStorage.getItem('userId');
-      if (savedUserId) {
-        try {
-          const user = await getUserById(savedUserId);
-          if (user) {
-            setDbUser({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
-            setIsImpersonating(Boolean(localStorage.getItem('originalAdminUserId')));
-          } else {
+    // Run seeding in background without blocking initial app render
+    seedDefaultAccounts().catch(e => console.warn('Background seed warning:', e));
+
+    async function init() {
+      try {
+        const savedUserId = localStorage.getItem('userId');
+        if (savedUserId) {
+          try {
+            const user = await getUserById(savedUserId);
+            if (user && mounted) {
+              setDbUser({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
+              setIsImpersonating(Boolean(localStorage.getItem('originalAdminUserId')));
+            } else {
+              localStorage.removeItem('userId');
+              localStorage.removeItem('originalAdminUserId');
+            }
+          } catch (e) {
+            console.error('Failed to load saved user session:', e);
             localStorage.removeItem('userId');
             localStorage.removeItem('originalAdminUserId');
           }
-        } catch {
-          localStorage.removeItem('userId');
-          localStorage.removeItem('originalAdminUserId');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
         }
       }
-      setLoading(false);
     }
+
+    // Safety timeout: ensure loading is NEVER true for more than 2 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 2000);
+
     init();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+    };
   }, []);
 
   const login = async (username: string, password: string): Promise<User> => {
