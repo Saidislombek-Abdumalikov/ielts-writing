@@ -10,7 +10,7 @@ import {
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
-  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3, ZoomIn, Maximize2
+  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3, ZoomIn, Maximize2, Minimize2
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageLightboxModal from '../components/ImageLightboxModal';
@@ -22,6 +22,16 @@ export default function TaskWorkspace() {
   const { id } = useParams<{ id: string }>();
   const { dbUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
   
   const [task, setTask] = useState<any>(() => {
     if (!id) return null;
@@ -721,15 +731,24 @@ export default function TaskWorkspace() {
             </div>
           )}
 
-          {/* Full Screen Button in Top Menu Bar */}
+          {/* Full Screen / Minimize Button in Top Menu Bar */}
           <button 
             type="button"
             onClick={toggleFullscreen}
             className="glass-card hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-xl border border-slate-700/60 text-xs font-semibold flex items-center transition-all shadow-sm text-slate-300 dark:text-slate-200"
-            title="Toggle Full Screen Mode (F11)"
+            title={isFullscreen ? "Exit Full Screen Mode (Esc)" : "Toggle Full Screen Mode (F11)"}
           >
-            <Maximize2 className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
-            <span>Full Screen</span>
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                <span>Minimize</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+                <span>Full Screen</span>
+              </>
+            )}
           </button>
 
           {/* Shared Exam Timer */}

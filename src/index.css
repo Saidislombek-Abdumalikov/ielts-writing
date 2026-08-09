@@ -100,13 +100,21 @@ html.light .bg-slate-900\/50 { background-color: #f1f5f9 !important; border-colo
 html.light .bg-slate-800, html.light .bg-slate-800\/60 { background-color: #e2e8f0 !important; border-color: #cbd5e1 !important; }
 
 /* Status Badges & Pills in Light Mode */
-html.light .bg-indigo-500\/20, html.light .bg-indigo-500\/10 {
+html.light .bg-indigo-500\/20, 
+html.light .bg-indigo-500\/10,
+html.light .bg-indigo-950\/30,
+html.light .bg-indigo-900\/40,
+html.light .bg-indigo-600\/20 {
   background-color: #e0e7ff !important;
   color: #3730a3 !important;
   border-color: #c7d2fe !important;
 }
-html.light .bg-emerald-500\/20, html.light .bg-emerald-500\/10 {
-  background-color: #d1fae5 !important;
+html.light .bg-emerald-500\/20, 
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-950\/30,
+html.light .bg-emerald-900\/40,
+html.light .bg-emerald-600\/20 {
+  background-color: #ecfdf5 !important;
   color: #065f46 !important;
   border-color: #a7f3d0 !important;
 }
@@ -121,13 +129,29 @@ html.light .bg-red-500\/20, html.light .bg-red-500\/10 {
   border-color: #fca5a5 !important;
 }
 
+/* Teacher Feedback Text Colors in Light Mode */
+html.light .text-emerald-200, 
+html.light .text-emerald-300, 
+html.light .text-emerald-400 { color: #047857 !important; }
+
 /* Borders in Light Mode */
 html.light .border-slate-800, 
 html.light .border-slate-700,
 html.light .border-slate-600 { border-color: #e2e8f0 !important; }
 
-/* Interactive Hover States in Light Mode */
-html.light .hover\:text-white:hover { color: #0f172a !important; }
+/* Interactive Hover & Button States in Light Mode */
+html.light .gradient-btn, 
+html.light .bg-indigo-600,
+html.light .hover\:bg-indigo-600:hover {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+html.light .gradient-btn *, 
+html.light .bg-indigo-600 *,
+html.light .hover\:bg-indigo-600:hover * {
+  color: #ffffff !important;
+}
+
 html.light .hover\:text-slate-200:hover { color: #1e293b !important; }
 html.light .hover\:bg-slate-700\/60:hover, 
 html.light .hover\:bg-slate-800:hover { background-color: #cbd5e1 !important; }
