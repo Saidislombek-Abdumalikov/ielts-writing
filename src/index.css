@@ -104,7 +104,10 @@ html.light .bg-indigo-500\/20,
 html.light .bg-indigo-500\/10,
 html.light .bg-indigo-950\/30,
 html.light .bg-indigo-900\/40,
-html.light .bg-indigo-600\/20 {
+html.light .bg-indigo-600\/20,
+html.light .bg-slate-700,
+html.light .bg-slate-700\/80,
+html.light .bg-blue-500\/20 {
   background-color: #e0e7ff !important;
   color: #3730a3 !important;
   border-color: #c7d2fe !important;

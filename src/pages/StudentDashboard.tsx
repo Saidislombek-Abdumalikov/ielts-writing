@@ -138,7 +138,7 @@ export default function StudentDashboard() {
                       </span>
                     )}
                     {sub?.status === 'draft' && (
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-700 text-slate-300">
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                         In Progress
                       </span>
                     )}

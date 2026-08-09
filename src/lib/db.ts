@@ -228,15 +228,32 @@ export async function seedDefaultAccounts() {
 
 const tasksCol = () => collection(firestore, 'tasks');
 
+// High-concurrency Memory Caching for 100+ Simultaneous Users
+let allTasksCache: { tasks: DbTask[]; fetchedAt: number } | null = null;
+const submissionMemoryCache = new Map<string, { sub: DbSubmission | null; fetchedAt: number }>();
+
 export async function getAllTasks(): Promise<DbTask[]> {
-  const snap = await getDocs(query(tasksCol(), orderBy('createdAt', 'desc')));
-  return snap.docs.map(d => ({
-    id: d.id,
-    ...d.data(),
-    startDate: toDate(d.data().startDate),
-    dueDate: toDateRequired(d.data().dueDate),
-    createdAt: toDateRequired(d.data().createdAt),
-  } as DbTask));
+  const now = Date.now();
+  if (allTasksCache && (now - allTasksCache.fetchedAt < 10000)) {
+    return allTasksCache.tasks;
+  }
+
+  try {
+    const snap = await getDocs(query(tasksCol(), orderBy('createdAt', 'desc')));
+    const tasks = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      startDate: toDate(d.data().startDate),
+      dueDate: toDateRequired(d.data().dueDate),
+      createdAt: toDateRequired(d.data().createdAt),
+    } as DbTask));
+
+    allTasksCache = { tasks, fetchedAt: now };
+    return tasks;
+  } catch (e) {
+    if (allTasksCache) return allTasksCache.tasks;
+    throw e;
+  }
 }
 
 export async function getTaskById(id: string): Promise<DbTask | null> {
@@ -326,18 +343,36 @@ export async function deleteTask(id: string): Promise<void> {
 const subsCol = () => collection(firestore, 'submissions');
 
 export async function getStudentSubmission(taskId: string, studentId: string): Promise<DbSubmission | null> {
-  const q = query(subsCol(), where('taskId', '==', taskId), where('studentId', '==', studentId));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return {
-    id: d.id, ...d.data(),
-    startedAt: toDate(d.data().startedAt),
-    expiresAt: toDate(d.data().expiresAt),
-    submittedAt: toDate(d.data().submittedAt),
-    createdAt: toDateRequired(d.data().createdAt),
-    updatedAt: toDateRequired(d.data().updatedAt),
-  } as DbSubmission;
+  const cacheKey = `${taskId}_${studentId}`;
+  const now = Date.now();
+  const cached = submissionMemoryCache.get(cacheKey);
+  if (cached && (now - cached.fetchedAt < 5000)) {
+    return cached.sub;
+  }
+
+  try {
+    const q = query(subsCol(), where('taskId', '==', taskId), where('studentId', '==', studentId));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      submissionMemoryCache.set(cacheKey, { sub: null, fetchedAt: now });
+      return null;
+    }
+    const d = snap.docs[0];
+    const sub = {
+      id: d.id, ...d.data(),
+      startedAt: toDate(d.data().startedAt),
+      expiresAt: toDate(d.data().expiresAt),
+      submittedAt: toDate(d.data().submittedAt),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbSubmission;
+
+    submissionMemoryCache.set(cacheKey, { sub, fetchedAt: now });
+    return sub;
+  } catch (e) {
+    if (cached) return cached.sub;
+    throw e;
+  }
 }
 
 export async function upsertSubmission(
@@ -359,6 +394,8 @@ export async function upsertSubmission(
     operationId?: string;
   }>
 ): Promise<DbSubmission> {
+  const cacheKey = `${taskId}_${studentId}`;
+  submissionMemoryCache.delete(cacheKey);
   const existing = await getStudentSubmission(taskId, studentId);
   const now = new Date();
 
