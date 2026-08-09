@@ -10,7 +10,7 @@ import {
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
-  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3, ZoomIn
+  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3, ZoomIn, Maximize2
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import ImageLightboxModal from '../components/ImageLightboxModal';
@@ -621,6 +621,18 @@ export default function TaskWorkspace() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.warn('Fullscreen request error:', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
   if (loading || authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center space-y-3">
@@ -849,26 +861,38 @@ export default function TaskWorkspace() {
               }
             </div>
 
-            {/* Task 1 Consistent Responsive Image Frame */}
+            {/* Task 1 Top-Aligned Expanded Responsive Image Frame with Fullscreen F11 Button */}
             {((isMock && activeTab === 'task1' && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.ieltsType === 'task1' && task?.imageUrl)) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
                   </span>
-                  <span className="text-[11px] text-slate-400 font-medium">Click image to expand full-screen</span>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFullscreen();
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold flex items-center transition-all shadow-sm"
+                      title="Toggle Full Screen Mode (F11)"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5 mr-1" /> Full Screen (F11)
+                    </button>
+                  </div>
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
-                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[300px] sm:min-h-[380px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[380px] sm:min-h-[480px] max-h-[620px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
                     src={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
                     alt="Task 1 Prompt Visual Graph" 
-                    className="w-full h-full object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                    className="w-full h-full object-contain object-top rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
                   />
                   <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
-                    <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Full Screen Lightbox Zoom
+                    <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Lightbox Zoom
                   </div>
                 </div>
               </div>
