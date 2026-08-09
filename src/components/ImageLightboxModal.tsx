@@ -46,11 +46,11 @@ export default function ImageLightboxModal({ isOpen, imageUrl, title, onClose }:
             </div>
           </div>
 
-          <div className="flex-1 w-full overflow-auto flex items-center justify-center p-2 sm:p-4">
+          <div className="flex-1 w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden">
             <img
               src={imageUrl}
               alt="Task 1 Visual Prompt High Res"
-              className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl border border-slate-800"
+              className="max-w-full max-h-[80vh] w-auto h-auto object-contain rounded-xl shadow-2xl border border-slate-800 shrink-0 select-none"
             />
           </div>
         </motion.div>

@@ -855,12 +855,12 @@ export default function TaskWorkspace() {
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
-                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[440px] sm:min-h-[540px] max-h-[700px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  className="relative w-full h-auto max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
                     src={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
                     alt="Task 1 Prompt Visual Graph" 
-                    className="w-full h-full object-contain object-top rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                    className="w-full h-auto max-h-[510px] object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
                   />
                   <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
                     <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Lightbox Zoom
