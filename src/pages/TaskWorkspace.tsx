@@ -885,14 +885,14 @@ export default function TaskWorkspace() {
                 )}
               </div>
             ) : (
-              /* Task 2 Layout: Prompt placed inside frame expanded by ~1 cm on each side */
+              /* Task 2 Layout: Prompt section height expands dynamically according to the text inside */
               <div className="space-y-2 pt-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <BookOpen className="w-4 h-4 mr-1 text-indigo-400" /> Task 2 Essay Topic & Instructions
                   </span>
                 </div>
-                <div className="relative w-full min-h-[360px] max-h-[500px] bg-slate-950 border border-slate-700/80 rounded-2xl p-6 sm:p-8 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl min-w-0">
+                <div className="relative w-full h-auto max-h-[500px] bg-slate-950 border border-slate-700/80 rounded-2xl p-6 sm:p-8 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl min-w-0">
                   <div className="prose prose-invert max-w-none text-slate-200 text-base sm:text-lg leading-relaxed whitespace-pre-wrap select-none font-medium">
                     {isMock ? (task?.task2Prompt || task?.promptText) : task?.promptText}
                   </div>
