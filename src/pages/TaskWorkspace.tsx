@@ -831,18 +831,10 @@ export default function TaskWorkspace() {
 
       {/* Main Workspace Layout (Symmetric Two-Column Split Screen) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Side Column: Title, Prompt & Visual Image (Clean Top Alignment) */}
+        {/* Left Side Column: Prompt & Visual Image (Clean Top Alignment, Zero Title) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4">
-            {/* Title at the very top */}
-            <h1 className="text-xl sm:text-2xl font-bold">
-              {isMock 
-                ? (activeTab === 'task1' ? (task?.task1Title || task?.title || 'Task 1 Report') : (task?.task2Title || task?.title || 'Task 2 Essay'))
-                : (task?.title || 'IELTS Writing Task')
-              }
-            </h1>
-
-            {/* Task 1 vs Task 2 Left Side Frame (Identical Symmetric Container Sizes) */}
+            {/* Task 1 vs Task 2 Left Side Frame (Prompt sitting at the very top, zero title) */}
             {(activeTab === 'task1' || (!isMock && task?.ieltsType === 'task1')) ? (
               <>
                 <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">

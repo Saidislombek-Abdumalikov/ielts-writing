@@ -10,6 +10,16 @@ interface ImageLightboxModalProps {
 }
 
 export default function ImageLightboxModal({ isOpen, imageUrl, title, onClose }: ImageLightboxModalProps) {
+  React.useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !imageUrl) return null;
 
   return (
