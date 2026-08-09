@@ -829,20 +829,20 @@ export default function TaskWorkspace() {
         </div>
       )}
 
-      {/* Main Workspace Layout (Symmetric Two-Column Split Screen) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Side Column: Prompt & Visual Image (Clean Top Alignment, Zero Title) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4">
-            {/* Task 1 vs Task 2 Left Side Frame (Prompt sitting at the very top, zero title) */}
+      {/* Main Workspace Layout (Symmetric Two-Column Split Screen with Strict Width Boundaries) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0">
+        {/* Left Side Column: Prompt & Visual Image (Strictly Bounded Width & Matching Margins) */}
+        <div className="lg:col-span-5 space-y-4 min-w-0">
+          <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4 min-w-0">
+            {/* Task 1 vs Task 2 Left Side Frame (Strict Boundaries, Identical Margins & Padding) */}
             {(activeTab === 'task1' || (!isMock && task?.ieltsType === 'task1')) ? (
-              <>
-                <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
+              <div className="space-y-4 min-w-0">
+                <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none min-w-0">
                   {isMock ? (task?.task1Prompt || task?.promptText) : task?.promptText}
                 </div>
 
                 {((isMock && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.imageUrl)) && (
-                  <div className="space-y-2 pt-1">
+                  <div className="space-y-2 pt-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-indigo-300 flex items-center">
                         <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
@@ -851,12 +851,12 @@ export default function TaskWorkspace() {
                     </div>
                     <div 
                       onClick={() => setShowLightbox(true)}
-                      className="relative w-full h-auto max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                      className="relative w-full max-w-full h-auto max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-2 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden min-w-0"
                     >
                       <img 
                         src={(isMock ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
                         alt="Task 1 Prompt Visual Graph" 
-                        className="w-full h-auto max-h-[510px] object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                        className="max-w-full max-h-[460px] w-auto h-auto object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01] shrink"
                       />
                       <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
                         <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Lightbox Zoom
@@ -864,16 +864,16 @@ export default function TaskWorkspace() {
                     </div>
                   </div>
                 )}
-              </>
+              </div>
             ) : (
-              /* Task 2 Layout: Prompt placed inside frame matching Task 1 picture size exactly */
-              <div className="space-y-2 pt-1">
+              /* Task 2 Layout: Prompt placed inside frame matching Task 1 exactly */
+              <div className="space-y-2 pt-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <BookOpen className="w-4 h-4 mr-1 text-indigo-400" /> Task 2 Essay Topic & Instructions
                   </span>
                 </div>
-                <div className="relative w-full min-h-[360px] max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl p-5 sm:p-6 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl">
+                <div className="relative w-full min-h-[340px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl p-5 sm:p-6 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl min-w-0">
                   <div className="prose prose-invert max-w-none text-slate-200 text-sm sm:text-base leading-relaxed whitespace-pre-wrap select-none">
                     {isMock ? (task?.task2Prompt || task?.promptText) : task?.promptText}
                   </div>
@@ -890,7 +890,7 @@ export default function TaskWorkspace() {
         </div>
 
         {/* Right Side Column: Writing Workspace Editor */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-4 min-w-0">
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4 relative">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
