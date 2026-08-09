@@ -671,7 +671,7 @@ export default function TaskWorkspace() {
   const totalMockWc = t1Wc + t2Wc;
 
   return (
-    <div className="space-y-6 animate-fade-up max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-up w-full max-w-[1400px] mx-auto pb-12 px-2 sm:px-4">
       {/* Toast Notification Banner */}
       {toastNotification && (
         <motion.div 
@@ -885,15 +885,15 @@ export default function TaskWorkspace() {
                 )}
               </div>
             ) : (
-              /* Task 2 Layout: Prompt placed inside frame matching Task 1 exactly */
+              /* Task 2 Layout: Prompt placed inside frame expanded by ~1 cm on each side */
               <div className="space-y-2 pt-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <BookOpen className="w-4 h-4 mr-1 text-indigo-400" /> Task 2 Essay Topic & Instructions
                   </span>
                 </div>
-                <div className="relative w-full min-h-[340px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl p-5 sm:p-6 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl min-w-0">
-                  <div className="prose prose-invert max-w-none text-slate-200 text-sm sm:text-base leading-relaxed whitespace-pre-wrap select-none">
+                <div className="relative w-full min-h-[360px] max-h-[500px] bg-slate-950 border border-slate-700/80 rounded-2xl p-6 sm:p-8 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl min-w-0">
+                  <div className="prose prose-invert max-w-none text-slate-200 text-base sm:text-lg leading-relaxed whitespace-pre-wrap select-none font-medium">
                     {isMock ? (task?.task2Prompt || task?.promptText) : task?.promptText}
                   </div>
                 </div>
@@ -908,13 +908,13 @@ export default function TaskWorkspace() {
           </div>
         </div>
 
-        {/* Right Side Column: Writing Workspace Editor */}
+        {/* Right Side Column: Writing Workspace Editor (Expanded by ~2 cm on each side) */}
         <div className="lg:col-span-7 space-y-4 min-w-0">
-          <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4 relative">
+          <div className="glass-card p-6 sm:p-8 rounded-2xl space-y-4 relative min-w-0">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span className="text-sm font-semibold">
+                <span className="text-sm sm:text-base font-semibold">
                   {isMock 
                     ? (activeTab === 'task1' ? 'Task 1 Response Area' : 'Task 2 Response Area')
                     : 'Essay Answer Area'
@@ -922,7 +922,7 @@ export default function TaskWorkspace() {
                 </span>
               </div>
 
-              <div className="text-xs text-slate-400 font-mono">
+              <div className="text-xs sm:text-sm text-slate-400 font-mono">
                 {currentWc} words
               </div>
             </div>
@@ -943,7 +943,7 @@ export default function TaskWorkspace() {
                   ? (activeTab === 'task1' ? "Write your Task 1 report response here..." : "Write your Task 2 essay response here...")
                   : "Write your complete essay response here..."
               }
-              className="w-full min-h-[460px] glass-input p-4 rounded-xl text-sm font-sans leading-relaxed resize-y focus:outline-none disabled:opacity-80"
+              className="w-full min-h-[500px] glass-input p-5 sm:p-6 rounded-xl text-sm sm:text-base font-sans leading-relaxed resize-y focus:outline-none disabled:opacity-80"
             />
           </div>
         </div>
