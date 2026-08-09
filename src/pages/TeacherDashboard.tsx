@@ -27,6 +27,9 @@ export default function TeacherDashboard() {
     assignmentMode: 'full',
     focusLabel: '',
     promptText: '',
+    task1Prompt: '',
+    task1ImageUrl: '',
+    task2Prompt: '',
     timerMinutes: 40,
     startDate: new Date().toISOString().slice(0, 16),
     dueDate: getTwoDaysFromNowString()
@@ -63,7 +66,10 @@ export default function TeacherDashboard() {
       ieltsType: task.ieltsType,
       assignmentMode: task.assignmentMode || 'full',
       focusLabel: task.focusLabel || '',
-      promptText: task.promptText,
+      promptText: task.promptText || '',
+      task1Prompt: task.task1Prompt || '',
+      task1ImageUrl: task.task1ImageUrl || '',
+      task2Prompt: task.task2Prompt || '',
       timerMinutes: task.timerMinutes || 40,
       startDate: task.startDate ? new Date(task.startDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       dueDate: new Date(task.dueDate).toISOString().slice(0, 16)
@@ -116,7 +122,7 @@ export default function TeacherDashboard() {
             className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
           >
             <Plus className="w-4 h-4 mr-2" />
-            Create Task
+            Create Assignment
           </button>
         </div>
       </div>
@@ -133,36 +139,49 @@ export default function TeacherDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Title</label>
-                <input type="text" required className="w-full glass-input px-4 py-2 rounded-lg text-sm" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} placeholder="e.g. Technology in Education" />
+                <input type="text" required className="w-full glass-input px-4 py-2 rounded-lg text-sm" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} placeholder="e.g. Full Academic Writing Mock Exam 1" />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">IELTS Type</label>
-                  <select className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm" value={newTask.ieltsType} onChange={e => setNewTask({...newTask, ieltsType: e.target.value})}>
-                    <option value="task1">Task 1 (Report)</option>
-                    <option value="task2">Task 2 (Essay)</option>
+                  <select 
+                    className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm bg-slate-900" 
+                    value={newTask.ieltsType} 
+                    onChange={e => {
+                      const type = e.target.value;
+                      setNewTask({
+                        ...newTask, 
+                        ieltsType: type,
+                        timerMinutes: type === 'mock' ? 60 : type === 'task1' ? 20 : 40
+                      });
+                    }}
+                  >
+                    <option value="task1">Task 1 (Report - 20m)</option>
+                    <option value="task2">Task 2 (Essay - 40m)</option>
+                    <option value="mock">🏆 Full IELTS Mock Exam (Task 1 + 2, 60m Shared Timer)</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">Assignment Mode</label>
-                  <select className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm" value={newTask.assignmentMode} onChange={e => setNewTask({...newTask, assignmentMode: e.target.value})}>
-                    <option value="full">Full Essay</option>
-                    <option value="partly">Partly (e.g. Intro only)</option>
+                  <select className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm bg-slate-900" value={newTask.assignmentMode} onChange={e => setNewTask({...newTask, assignmentMode: e.target.value})}>
+                    <option value="full">Full Exam</option>
+                    <option value="partly">Partly (e.g. Focus area)</option>
                   </select>
                 </div>
               </div>
               
               {newTask.assignmentMode === 'partly' && (
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Focus Area (e.g., Intro + Overview)</label>
+                  <label className="block text-sm text-slate-400 mb-1">Focus Area (e.g., Overview only)</label>
                   <input className="w-full glass-input px-4 py-2 rounded-lg text-sm" value={newTask.focusLabel} onChange={e => setNewTask({...newTask, focusLabel: e.target.value})} placeholder="e.g. Write Introduction and Overview" />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Timer (minutes)</label>
+                <label className="block text-sm text-slate-400 mb-1">Total Exam Timer (minutes)</label>
                 <input type="number" required className="w-full glass-input px-4 py-2 rounded-lg text-sm" value={newTask.timerMinutes} onChange={e => setNewTask({...newTask, timerMinutes: parseInt(e.target.value)})} />
+                <p className="text-xs text-slate-500 mt-1">Shared total timer for the entire exam (e.g., 60 or 70 mins)</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -181,10 +200,23 @@ export default function TeacherDashboard() {
               </div>
             </div>
             
-            <div className="flex flex-col">
-              <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
-              <textarea required className="w-full h-full min-h-[160px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact essay prompt..." />
-            </div>
+            {newTask.ieltsType === 'mock' ? (
+              <div className="flex flex-col space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-indigo-300 mb-1">Task 1 Question / Prompt (Report)</label>
+                  <textarea required className="w-full min-h-[100px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task1Prompt || newTask.promptText} onChange={e => setNewTask({...newTask, task1Prompt: e.target.value, promptText: e.target.value})} placeholder="Enter Task 1 prompt..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-indigo-300 mb-1">Task 2 Question / Prompt (Essay)</label>
+                  <textarea required className="w-full min-h-[100px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task2Prompt} onChange={e => setNewTask({...newTask, task2Prompt: e.target.value})} placeholder="Enter Task 2 essay prompt..." />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
+                <textarea required className="w-full h-full min-h-[160px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact prompt..." />
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end space-x-3">

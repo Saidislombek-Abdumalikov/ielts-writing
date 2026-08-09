@@ -25,10 +25,13 @@ export interface DbTask {
   id: string;
   teacherId: string;
   title: string;
-  ieltsType: string;
+  ieltsType: string;         // 'task1' | 'task2' | 'mock'
   assignmentMode: string;
   focusLabel: string | null;
   promptText: string;
+  task1Prompt?: string | null;
+  task1ImageUrl?: string | null;
+  task2Prompt?: string | null;
   imageUrl: string | null;
   timerMinutes: number | null;
   minTimerMinutes: number | null;
@@ -43,9 +46,15 @@ export interface DbSubmission {
   studentId: string;
   status: string;
   content: string;
+  task1Content?: string | null;
+  task2Content?: string | null;
+  task1WordCount?: number;
+  task2WordCount?: number;
   wordCount: number;
   pasteAttemptCount: number;
   suspiciousBurstFlag: boolean;
+  startedAt?: Date | null;
+  expiresAt?: Date | null;
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -232,6 +241,9 @@ export async function createTask(teacherId: string, data: any): Promise<DbTask> 
     assignmentMode: data.assignmentMode || 'full',
     focusLabel: data.focusLabel || null,
     promptText: data.promptText,
+    task1Prompt: data.task1Prompt || null,
+    task1ImageUrl: data.task1ImageUrl || null,
+    task2Prompt: data.task2Prompt || null,
     imageUrl: data.imageUrl || null,
     timerMinutes: data.timerMinutes ? Number(data.timerMinutes) : 40,
     minTimerMinutes: data.minTimerMinutes ? Number(data.minTimerMinutes) : null,
@@ -249,6 +261,9 @@ export async function updateTask(id: string, data: any): Promise<DbTask> {
   if (data.assignmentMode !== undefined) updatePayload.assignmentMode = data.assignmentMode;
   if (data.focusLabel !== undefined) updatePayload.focusLabel = data.focusLabel;
   if (data.promptText !== undefined) updatePayload.promptText = data.promptText;
+  if (data.task1Prompt !== undefined) updatePayload.task1Prompt = data.task1Prompt;
+  if (data.task1ImageUrl !== undefined) updatePayload.task1ImageUrl = data.task1ImageUrl;
+  if (data.task2Prompt !== undefined) updatePayload.task2Prompt = data.task2Prompt;
   if (data.imageUrl !== undefined) updatePayload.imageUrl = data.imageUrl;
   if (data.timerMinutes !== undefined) updatePayload.timerMinutes = Number(data.timerMinutes);
   if (data.minTimerMinutes !== undefined) updatePayload.minTimerMinutes = Number(data.minTimerMinutes);
@@ -281,6 +296,8 @@ export async function getStudentSubmission(taskId: string, studentId: string): P
   const d = snap.docs[0];
   return {
     id: d.id, ...d.data(),
+    startedAt: toDate(d.data().startedAt),
+    expiresAt: toDate(d.data().expiresAt),
     submittedAt: toDate(d.data().submittedAt),
     createdAt: toDateRequired(d.data().createdAt),
     updatedAt: toDateRequired(d.data().updatedAt),
@@ -305,6 +322,13 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
       status: targetStatus,
       updatedAt: Timestamp.fromDate(now),
     };
+
+    if (data.task1Content !== undefined) updateData.task1Content = data.task1Content;
+    if (data.task2Content !== undefined) updateData.task2Content = data.task2Content;
+    if (data.task1WordCount !== undefined) updateData.task1WordCount = data.task1WordCount;
+    if (data.task2WordCount !== undefined) updateData.task2WordCount = data.task2WordCount;
+    if (data.startedAt) updateData.startedAt = Timestamp.fromDate(new Date(data.startedAt));
+    if (data.expiresAt) updateData.expiresAt = Timestamp.fromDate(new Date(data.expiresAt));
     
     if (targetStatus === 'submitted' && !existing.submittedAt) {
       updateData.submittedAt = Timestamp.fromDate(now);
@@ -313,7 +337,7 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
     await updateDoc(doc(firestore, 'submissions', existing.id), updateData);
     return { ...existing, ...updateData, updatedAt: now, submittedAt: updateData.submittedAt ? now : existing.submittedAt };
   } else {
-    const newSub = {
+    const newSub: any = {
       taskId,
       studentId,
       content: data.content || '',
@@ -325,6 +349,14 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
     };
+
+    if (data.task1Content !== undefined) newSub.task1Content = data.task1Content;
+    if (data.task2Content !== undefined) newSub.task2Content = data.task2Content;
+    if (data.task1WordCount !== undefined) newSub.task1WordCount = data.task1WordCount;
+    if (data.task2WordCount !== undefined) newSub.task2WordCount = data.task2WordCount;
+    if (data.startedAt) newSub.startedAt = Timestamp.fromDate(new Date(data.startedAt));
+    if (data.expiresAt) newSub.expiresAt = Timestamp.fromDate(new Date(data.expiresAt));
+
     const docRef = await addDoc(subsCol(), newSub);
     return {
       id: docRef.id, ...newSub,

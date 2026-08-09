@@ -6,11 +6,12 @@ import { saveLocalDraft, getLocalDraft, clearLocalDraft } from '../lib/draftMana
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
-  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw
+  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 type SaveStatus = 'saved' | 'saving' | 'offline' | 'error';
+type MockTab = 'task1' | 'task2';
 
 export default function TaskWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,11 @@ export default function TaskWorkspace() {
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [toastNotification, setToastNotification] = useState<string>('');
   
+  // Phase 3: Mock Exam Tabs & Dual Content State
+  const [activeTab, setActiveTab] = useState<MockTab>('task1');
+  const [task1Content, setTask1Content] = useState('');
+  const [task2Content, setTask2Content] = useState('');
+
   // Phase 1 & 2 Architecture: Performance, Save Status & Draft Recovery
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -33,13 +39,23 @@ export default function TaskWorkspace() {
   // Silent auto-save refs
   const lastSavedContentRef = useRef<string>('');
   const contentRef = useRef<string>('');
+  const task1ContentRef = useRef<string>('');
+  const task2ContentRef = useRef<string>('');
+  const activeTabRef = useRef<MockTab>('task1');
+
   const isSubmittedRef = useRef<boolean>(false);
   const isSavingRef = useRef<boolean>(false);
 
-  // Keep contentRef in sync for event listeners
+  // Expiration timestamp ref (Server-Controlled Timer)
+  const expiresAtMsRef = useRef<number | null>(null);
+
+  // Keep refs in sync for event listeners
   useEffect(() => {
     contentRef.current = content;
-  }, [content]);
+    if (activeTab === 'task1') task1ContentRef.current = content;
+    else task2ContentRef.current = content;
+    activeTabRef.current = activeTab;
+  }, [content, activeTab]);
 
   // Anti-cheat metrics
   const [pasteAttempts, setPasteAttempts] = useState(0);
@@ -47,21 +63,28 @@ export default function TaskWorkspace() {
   const lastKeyTimeRef = useRef<number>(Date.now());
   const charBurstCountRef = useRef<number>(0);
 
-  // Timer
+  // Shared Exam Timer
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   // Core Save Function (IndexedDB + Firestore Sync)
   const performSave = useCallback(async (forcedContent?: string) => {
-    const textToSave = forcedContent !== undefined ? forcedContent : contentRef.current;
+    const currentActiveText = forcedContent !== undefined ? forcedContent : contentRef.current;
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
-    if (textToSave === lastSavedContentRef.current) {
+
+    const isMock = task?.ieltsType === 'mock';
+    const t1Text = isMock ? (activeTabRef.current === 'task1' ? currentActiveText : task1ContentRef.current) : currentActiveText;
+    const t2Text = isMock ? (activeTabRef.current === 'task2' ? currentActiveText : task2ContentRef.current) : '';
+
+    const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : currentActiveText;
+
+    if (combinedText === lastSavedContentRef.current) {
       setSaveStatus('saved');
       return;
     }
 
     // Always persist to IndexedDB/LocalStorage first
-    saveLocalDraft(id, dbUser.id, textToSave, false).catch(console.error);
+    saveLocalDraft(id, dbUser.id, combinedText, false).catch(console.error);
 
     if (!navigator.onLine) {
       setSaveStatus('offline');
@@ -71,10 +94,18 @@ export default function TaskWorkspace() {
     try {
       isSavingRef.current = true;
       setSaveStatus('saving');
-      const wc = textToSave.trim() ? textToSave.trim().split(/\s+/).length : 0;
+      
+      const t1Wc = t1Text.trim() ? t1Text.trim().split(/\s+/).length : 0;
+      const t2Wc = t2Text.trim() ? t2Text.trim().split(/\s+/).length : 0;
+      const totalWc = isMock ? (t1Wc + t2Wc) : (currentActiveText.trim() ? currentActiveText.trim().split(/\s+/).length : 0);
+
       const res = await upsertSubmission(id, dbUser.id, {
-        content: textToSave,
-        wordCount: wc,
+        content: combinedText,
+        task1Content: t1Text,
+        task2Content: t2Text,
+        task1WordCount: t1Wc,
+        task2WordCount: t2Wc,
+        wordCount: totalWc,
         pasteAttemptCount: pasteAttempts,
         suspiciousBurstFlag: suspiciousBurst,
         status: 'draft'
@@ -83,18 +114,18 @@ export default function TaskWorkspace() {
       if (!isSubmittedRef.current) {
         setSubmission(res);
       }
-      lastSavedContentRef.current = textToSave;
+      lastSavedContentRef.current = combinedText;
       setSaveStatus('saved');
       
       // Mark local draft as synced with server
-      saveLocalDraft(id, dbUser.id, textToSave, true).catch(console.error);
+      saveLocalDraft(id, dbUser.id, combinedText, true).catch(console.error);
     } catch (err) {
       console.error('Auto-save error:', err);
       setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
     }
-  }, [id, dbUser, pasteAttempts, suspiciousBurst]);
+  }, [id, dbUser, task, pasteAttempts, suspiciousBurst]);
 
   // Network Status Monitor
   useEffect(() => {
@@ -116,7 +147,7 @@ export default function TaskWorkspace() {
     };
   }, [performSave]);
 
-  // Initial Workspace Loading & Zero-Data-Loss Draft Recovery
+  // Initial Workspace Loading & Server-Controlled Timer & Draft Recovery
   useEffect(() => {
     if (!id || !dbUser) return;
     async function loadWorkspace() {
@@ -143,11 +174,8 @@ export default function TaskWorkspace() {
         const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
         const localText = localDraftRecord?.content || '';
         const serverText = subData?.content || '';
-        
-        let initialText = serverText;
 
-        // Smart Conflict Resolution:
-        // If local draft exists and is newer or longer than server text, recover it!
+        let initialText = serverText;
         if (localText && localText !== serverText && !isSubmittedRef.current) {
           const localTime = localDraftRecord?.updatedAt || 0;
           const serverTime = subData?.updatedAt ? new Date(subData.updatedAt).getTime() : 0;
@@ -159,27 +187,59 @@ export default function TaskWorkspace() {
           }
         }
 
-        setContent(initialText);
-        contentRef.current = initialText;
+        const isMock = taskData.ieltsType === 'mock';
+        if (isMock) {
+          const t1 = subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
+          const t2 = subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
+          setTask1Content(t1);
+          setTask2Content(t2);
+          task1ContentRef.current = t1;
+          task2ContentRef.current = t2;
+          setContent(t1);
+          contentRef.current = t1;
+        } else {
+          setContent(initialText);
+          contentRef.current = initialText;
+        }
+
         lastSavedContentRef.current = serverText;
         setPasteAttempts(subData?.pasteAttemptCount || 0);
         setSuspiciousBurst(subData?.suspiciousBurstFlag || false);
 
+        // Phase 3: Server-Controlled Timer Calculations
         if (taskData.timerMinutes) {
-          const storageKey = `task_timer_start_${id!}_${dbUser!.id}`;
           const nowMs = Date.now();
-          let startTimeMs = localStorage.getItem(storageKey);
+          const totalSecs = taskData.timerMinutes * 60;
+          
+          let startedMs = subData?.startedAt ? new Date(subData.startedAt).getTime() : null;
+          let expiresMs = subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null;
 
-          if (!startTimeMs) {
-            const subCreatedMs = subData?.createdAt ? new Date(subData.createdAt).getTime() : null;
-            startTimeMs = (subCreatedMs || nowMs).toString();
-            localStorage.setItem(storageKey, startTimeMs);
+          const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
+
+          if (!startedMs) {
+            const storedStart = localStorage.getItem(timerStorageKey);
+            startedMs = storedStart ? parseInt(storedStart, 10) : nowMs;
+            localStorage.setItem(timerStorageKey, startedMs.toString());
           }
 
-          const elapsedSecs = Math.floor((nowMs - parseInt(startTimeMs, 10)) / 1000);
-          const totalSecs = taskData.timerMinutes * 60;
-          const remainingSecs = Math.max(0, totalSecs - elapsedSecs);
+          if (!expiresMs) {
+            expiresMs = startedMs + (totalSecs * 1000);
+          }
+
+          expiresAtMsRef.current = expiresMs;
+
+          // Calculate exact remaining seconds from server/stored expiration timestamp
+          const remainingSecs = Math.max(0, Math.floor((expiresMs - nowMs) / 1000));
           setTimeLeft(remainingSecs);
+
+          // Initialize submission startedAt/expiresAt if missing
+          if (!subData?.startedAt && !isSubmittedRef.current) {
+            upsertSubmission(id!, dbUser!.id, {
+              startedAt: new Date(startedMs),
+              expiresAt: new Date(expiresMs),
+              status: 'draft'
+            }).catch(console.error);
+          }
         }
       } catch (err: any) {
         setError(err.message || 'Failed to load task');
@@ -190,28 +250,36 @@ export default function TaskWorkspace() {
     loadWorkspace();
   }, [id, dbUser]);
 
-  // Countdown timer with auto-submit when timer reaches 0
+  // Phase 3: Shared Countdown Timer with Server Expiration Calculation
   useEffect(() => {
     if (timeLeft === null || submission?.status === 'submitted' || submission?.status === 'graded') return;
     
-    if (timeLeft <= 0) {
-      if (!isSubmittedRef.current && content.trim()) {
-        handleConfirmSubmit();
-      }
-      return;
-    }
+    const interval = setInterval(() => {
+      if (expiresAtMsRef.current) {
+        const remaining = Math.max(0, Math.floor((expiresAtMsRef.current - Date.now()) / 1000));
+        setTimeLeft(remaining);
 
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev === null || prev <= 1) {
-          clearInterval(timer);
-          return 0;
+        if (remaining <= 0) {
+          clearInterval(interval);
+          if (!isSubmittedRef.current) {
+            handleConfirmSubmit();
+          }
         }
-        return prev - 1;
-      });
+      } else {
+        setTimeLeft(prev => {
+          if (prev === null || prev <= 1) {
+            clearInterval(interval);
+            if (!isSubmittedRef.current) {
+              handleConfirmSubmit();
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => clearInterval(interval);
   }, [timeLeft, submission]);
 
   // Sync isSubmittedRef state
@@ -226,7 +294,6 @@ export default function TaskWorkspace() {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
     if (submission?.status === 'submitted' || submission?.status === 'graded') return;
-    if (content === lastSavedContentRef.current) return;
 
     setSaveStatus('saving');
     
@@ -244,9 +311,7 @@ export default function TaskWorkspace() {
     if (submission?.status === 'submitted' || submission?.status === 'graded') return;
 
     const backupInterval = setInterval(() => {
-      if (contentRef.current !== lastSavedContentRef.current) {
-        performSave();
-      }
+      performSave();
     }, 5000);
 
     return () => clearInterval(backupInterval);
@@ -274,11 +339,41 @@ export default function TaskWorkspace() {
     };
   }, [performSave, id, dbUser]);
 
+  // Handle Tab Switch between Task 1 ↔ Task 2 in Mock Exam
+  const handleTabSwitch = (targetTab: MockTab) => {
+    if (targetTab === activeTab) return;
+    performSave();
+
+    if (activeTab === 'task1') {
+      setTask1Content(content);
+      task1ContentRef.current = content;
+    } else {
+      setTask2Content(content);
+      task2ContentRef.current = content;
+    }
+
+    const nextText = targetTab === 'task1' ? task1ContentRef.current : task2ContentRef.current;
+    setActiveTab(targetTab);
+    activeTabRef.current = targetTab;
+    setContent(nextText);
+    contentRef.current = nextText;
+  };
+
   // Fast Instant Local Input Change Handler (0ms Latency + IndexedDB Write)
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     setContent(newVal);
     contentRef.current = newVal;
+
+    if (task?.ieltsType === 'mock') {
+      if (activeTab === 'task1') {
+        setTask1Content(newVal);
+        task1ContentRef.current = newVal;
+      } else {
+        setTask2Content(newVal);
+        task2ContentRef.current = newVal;
+      }
+    }
     
     if (id && dbUser && !isSubmittedRef.current) {
       saveLocalDraft(id, dbUser.id, newVal, false).catch(console.error);
@@ -334,7 +429,10 @@ export default function TaskWorkspace() {
     lastKeyTimeRef.current = now;
   };
 
-  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const currentWc = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const t1Wc = task1Content.trim() ? task1Content.trim().split(/\s+/).length : 0;
+  const t2Wc = task2Content.trim() ? task2Content.trim().split(/\s+/).length : 0;
+  const totalMockWc = t1Wc + t2Wc;
 
   const handleConfirmSubmit = async () => {
     if (!id || !dbUser) return;
@@ -342,22 +440,31 @@ export default function TaskWorkspace() {
     isSubmittedRef.current = true;
     try {
       setSubmitting(true);
-      const calculatedWordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+      const isMock = task?.ieltsType === 'mock';
+      const t1Text = isMock ? (activeTab === 'task1' ? content : task1Content) : content;
+      const t2Text = isMock ? (activeTab === 'task2' ? content : task2Content) : '';
+      const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
+      const totalWc = isMock ? (t1Text.trim().split(/\s+/).length + t2Text.trim().split(/\s+/).length) : currentWc;
+
       const res = await upsertSubmission(id, dbUser.id, {
-        content,
-        wordCount: calculatedWordCount,
+        content: combinedText,
+        task1Content: t1Text,
+        task2Content: t2Text,
+        task1WordCount: t1Text.trim().split(/\s+/).length,
+        task2WordCount: t2Text.trim().split(/\s+/).length,
+        wordCount: totalWc,
         pasteAttemptCount: pasteAttempts,
         suspiciousBurstFlag: suspiciousBurst,
         status: 'submitted'
       });
       setSubmission({ ...res, status: 'submitted' });
-      lastSavedContentRef.current = content;
+      lastSavedContentRef.current = combinedText;
       setSaveStatus('saved');
       
       // Clear local draft upon final submission
       await clearLocalDraft(id, dbUser.id);
       
-      setToastNotification('🎉 Essay successfully submitted! Your teacher has received your response and will evaluate it soon.');
+      setToastNotification('🎉 Exam successfully submitted! Your teacher has received your response.');
       setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
       isSubmittedRef.current = false;
@@ -401,6 +508,7 @@ export default function TaskWorkspace() {
   const isPastDue = dueDate && now > dueDate;
   const isSubmitted = submission?.status === 'submitted' || submission?.status === 'graded';
   const isReadOnly = isSubmitted || isNotStarted || isPastDue;
+  const isMock = task.ieltsType === 'mock';
 
   return (
     <div className="space-y-6 animate-fade-up w-full max-w-[95%] lg:max-w-[90%] mx-auto pt-8 sm:pt-12 pb-12 px-2 sm:px-4">
@@ -418,8 +526,9 @@ export default function TaskWorkspace() {
         </button>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Shared Exam Timer */}
           {timeLeft !== null && !isSubmitted && (
-            <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-sm font-mono font-bold ${
+            <div className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border text-sm font-mono font-bold shadow-md ${
               timeLeft < 300 
                 ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse' 
                 : 'glass-card text-indigo-300 border-indigo-500/30'
@@ -430,8 +539,8 @@ export default function TaskWorkspace() {
           )}
           
           <div className="glass-card px-3 py-1.5 rounded-xl text-sm font-medium text-slate-300">
-            <span className="text-slate-400 mr-2">Words:</span>
-            <span className="text-indigo-400 font-semibold">{wordCount}</span>
+            <span className="text-slate-400 mr-2">{isMock ? 'Total Words:' : 'Words:'}</span>
+            <span className="text-indigo-400 font-semibold">{isMock ? totalMockWc : currentWc}</span>
           </div>
 
           {isSubmitted ? (
@@ -452,22 +561,55 @@ export default function TaskWorkspace() {
           ) : (
             <button 
               onClick={() => {
-                if (!content.trim()) {
+                if (isMock) {
+                  if (!task1Content.trim() && !task2Content.trim() && !content.trim()) {
+                    setError('Please write an essay response before submitting.');
+                    return;
+                  }
+                } else if (!content.trim()) {
                   setError('Please write your essay response before submitting.');
                   return;
                 }
                 setError('');
                 setShowConfirmSubmit(true);
               }}
-              disabled={submitting || !content.trim()}
+              disabled={submitting}
               className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium flex items-center shadow-lg disabled:opacity-50"
             >
               <Send className="w-4 h-4 mr-2" />
-              {submitting ? 'Submitting...' : 'Submit Essay'}
+              {submitting ? 'Submitting...' : 'Submit Exam'}
             </button>
           )}
         </div>
       </div>
+
+      {/* Mock Exam Tab Navigation Header */}
+      {isMock && (
+        <div className="flex bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs sm:text-sm font-semibold max-w-md mx-auto shadow-lg">
+          <button 
+            onClick={() => handleTabSwitch('task1')}
+            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center space-x-2 ${
+              activeTab === 'task1' 
+                ? 'bg-indigo-600 text-white shadow-lg' 
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Task 1 Report ({t1Wc} words)</span>
+          </button>
+          <button 
+            onClick={() => handleTabSwitch('task2')}
+            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center space-x-2 ${
+              activeTab === 'task2' 
+                ? 'bg-indigo-600 text-white shadow-lg' 
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>Task 2 Essay ({t2Wc} words)</span>
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-500/20 border border-red-500/30 text-red-300 text-sm rounded-xl flex items-center">
@@ -483,7 +625,10 @@ export default function TaskWorkspace() {
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
               <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                {task.ieltsType === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)'}
+                {isMock 
+                  ? (activeTab === 'task1' ? 'Task 1 (Report - 150w min)' : 'Task 2 (Essay - 250w min)')
+                  : (task.ieltsType === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)')
+                }
               </span>
               {task.assignmentMode === 'partly' && (
                 <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -495,13 +640,16 @@ export default function TaskWorkspace() {
             <h1 className="text-xl sm:text-2xl font-bold">{task.title}</h1>
 
             <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
-              {task.promptText}
+              {isMock 
+                ? (activeTab === 'task1' ? (task.task1Prompt || task.promptText) : (task.task2Prompt || task.promptText))
+                : task.promptText
+              }
             </div>
 
             <div className="pt-2 text-xs text-slate-400 space-y-1">
-              <p>• Minimum recommended words: {task.ieltsType === 'task1' ? '150 words' : '250 words'}</p>
+              <p>• Recommended length: {activeTab === 'task1' ? '150 words' : '250 words'}</p>
+              <p>• Shared Exam Timer: Switching tabs does not reset time.</p>
               <p>• Copying & pasting text is strictly disabled.</p>
-              <p>• Zero-Data-Loss Active: Automatic IndexedDB + Cloud protection.</p>
             </div>
           </div>
 
@@ -514,23 +662,6 @@ export default function TaskWorkspace() {
             >
               <CheckCircle className="w-5 h-5 mr-3 text-emerald-400 shrink-0" />
               <span>{toastNotification}</span>
-            </motion.div>
-          )}
-
-          {/* Submission Submitted & Pending Teacher Feedback Status */}
-          {submission?.status === 'submitted' && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-4 rounded-2xl border-amber-500/30 bg-amber-500/10 text-xs sm:text-sm text-amber-200 flex items-center justify-between"
-            >
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-amber-400 shrink-0" />
-                <div>
-                  <span className="font-semibold block text-amber-300">Submission Delivered</span>
-                  <span className="text-xs text-amber-200/80">Your essay has been sent to your teacher. Evaluation will appear here once graded.</span>
-                </div>
-              </div>
             </motion.div>
           )}
 
@@ -561,16 +692,6 @@ export default function TaskWorkspace() {
               </div>
             </motion.div>
           )}
-
-          {/* Anti-cheat Alert if paste was attempted */}
-          {pasteAttempts > 0 && (
-            <div className="glass-card p-4 rounded-2xl border-amber-500/40 bg-amber-500/10 text-xs text-amber-300 space-y-1">
-              <div className="flex items-center font-semibold">
-                <ShieldAlert className="w-4 h-4 mr-2 text-amber-400" />
-                Anti-Paste Active: Copying/Pasting is blocked ({pasteAttempts} attempts blocked)
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Right Side: Text Editor */}
@@ -579,7 +700,7 @@ export default function TaskWorkspace() {
             <div className="flex justify-between items-center pb-3 border-b border-slate-800 text-xs text-slate-400">
               <div className="flex items-center space-x-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span>Response Workspace</span>
+                <span>{isMock ? (activeTab === 'task1' ? 'Task 1 Response Editor' : 'Task 2 Response Editor') : 'Response Workspace'}</span>
               </div>
 
               {/* Live Save Status Badge */}
@@ -629,7 +750,7 @@ export default function TaskWorkspace() {
                   ? 'The submission deadline for this assignment has passed.' 
                   : isSubmitted 
                   ? 'Your submission has been finalized.' 
-                  : 'Type your IELTS response here... (Copying/pasting is disabled)'
+                  : `Type your ${isMock ? (activeTab === 'task1' ? 'Task 1 Report' : 'Task 2 Essay') : 'IELTS'} response here...`
               }
               className="w-full flex-1 min-h-[350px] sm:min-h-[450px] bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none resize-none font-mono text-sm leading-relaxed p-2"
             />
@@ -640,9 +761,9 @@ export default function TaskWorkspace() {
       {/* In-App Confirmation Modal */}
       <ConfirmModal 
         isOpen={showConfirmSubmit}
-        title="Submit Essay"
-        message="Are you sure you want to submit your final response to your teacher? Once submitted, you cannot edit your essay further."
-        confirmText="Submit Essay"
+        title="Submit Exam"
+        message="Are you sure you want to submit your final mock exam response to your teacher? Once submitted, you cannot edit your responses further."
+        confirmText="Submit Exam"
         cancelText="Keep Editing"
         variant="primary"
         onConfirm={handleConfirmSubmit}
