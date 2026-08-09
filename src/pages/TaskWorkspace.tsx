@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
 import { getTaskById, getStudentSubmissionWithFeedback, upsertSubmission } from '../lib/db';
+import { saveLocalDraft, getLocalDraft, clearLocalDraft } from '../lib/draftManager';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
@@ -25,7 +26,7 @@ export default function TaskWorkspace() {
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [toastNotification, setToastNotification] = useState<string>('');
   
-  // Phase 1 Architecture: Performance & Save Status
+  // Phase 1 & 2 Architecture: Performance, Save Status & Draft Recovery
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   
@@ -49,9 +50,7 @@ export default function TaskWorkspace() {
   // Timer
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  const localDraftKey = `local_draft_${id}_${dbUser?.id}`;
-
-  // Core Save Function
+  // Core Save Function (IndexedDB + Firestore Sync)
   const performSave = useCallback(async (forcedContent?: string) => {
     const textToSave = forcedContent !== undefined ? forcedContent : contentRef.current;
     if (!id || !dbUser) return;
@@ -61,14 +60,11 @@ export default function TaskWorkspace() {
       return;
     }
 
+    // Always persist to IndexedDB/LocalStorage first
+    saveLocalDraft(id, dbUser.id, textToSave, false).catch(console.error);
+
     if (!navigator.onLine) {
       setSaveStatus('offline');
-      // Save locally to localStorage
-      try {
-        localStorage.setItem(localDraftKey, textToSave);
-      } catch (e) {
-        console.error('Local storage write error:', e);
-      }
       return;
     }
 
@@ -89,15 +85,16 @@ export default function TaskWorkspace() {
       }
       lastSavedContentRef.current = textToSave;
       setSaveStatus('saved');
-      // Clear synced local draft
-      localStorage.removeItem(localDraftKey);
+      
+      // Mark local draft as synced with server
+      saveLocalDraft(id, dbUser.id, textToSave, true).catch(console.error);
     } catch (err) {
       console.error('Auto-save error:', err);
       setSaveStatus('error');
     } finally {
       isSavingRef.current = false;
     }
-  }, [id, dbUser, pasteAttempts, suspiciousBurst, localDraftKey]);
+  }, [id, dbUser, pasteAttempts, suspiciousBurst]);
 
   // Network Status Monitor
   useEffect(() => {
@@ -119,7 +116,7 @@ export default function TaskWorkspace() {
     };
   }, [performSave]);
 
-  // Initial Workspace Loading & Local Draft Recovery
+  // Initial Workspace Loading & Zero-Data-Loss Draft Recovery
   useEffect(() => {
     if (!id || !dbUser) return;
     async function loadWorkspace() {
@@ -134,30 +131,39 @@ export default function TaskWorkspace() {
           subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
           if (subData) {
             setSubmission(subData);
-            const serverText = subData.content || '';
-            
-            // Check if local un-synced draft exists and is newer
-            const localDraft = localStorage.getItem(localDraftKey);
-            const initialText = (localDraft && localDraft.length > serverText.length) ? localDraft : serverText;
-            
-            setContent(initialText);
-            contentRef.current = initialText;
-            lastSavedContentRef.current = serverText;
-            setPasteAttempts(subData.pasteAttemptCount || 0);
-            setSuspiciousBurst(subData.suspiciousBurstFlag || false);
-
             if (subData.status === 'submitted' || subData.status === 'graded') {
               isSubmittedRef.current = true;
             }
           }
         } catch {
-          // Check local draft fallback if no server submission yet
-          const localDraft = localStorage.getItem(localDraftKey);
-          if (localDraft) {
-            setContent(localDraft);
-            contentRef.current = localDraft;
+          // No server submission record yet
+        }
+
+        // Fetch local draft from IndexedDB/LocalStorage for zero-data-loss protection
+        const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
+        const localText = localDraftRecord?.content || '';
+        const serverText = subData?.content || '';
+        
+        let initialText = serverText;
+
+        // Smart Conflict Resolution:
+        // If local draft exists and is newer or longer than server text, recover it!
+        if (localText && localText !== serverText && !isSubmittedRef.current) {
+          const localTime = localDraftRecord?.updatedAt || 0;
+          const serverTime = subData?.updatedAt ? new Date(subData.updatedAt).getTime() : 0;
+
+          if (localTime > serverTime || localText.length > serverText.length) {
+            initialText = localText;
+            setToastNotification('⚡ Unsaved local draft recovered from browser memory!');
+            setTimeout(() => setToastNotification(''), 5000);
           }
         }
+
+        setContent(initialText);
+        contentRef.current = initialText;
+        lastSavedContentRef.current = serverText;
+        setPasteAttempts(subData?.pasteAttemptCount || 0);
+        setSuspiciousBurst(subData?.suspiciousBurstFlag || false);
 
         if (taskData.timerMinutes) {
           const storageKey = `task_timer_start_${id!}_${dbUser!.id}`;
@@ -182,7 +188,7 @@ export default function TaskWorkspace() {
       }
     }
     loadWorkspace();
-  }, [id, dbUser, localDraftKey]);
+  }, [id, dbUser]);
 
   // Countdown timer with auto-submit when timer reaches 0
   useEffect(() => {
@@ -215,7 +221,7 @@ export default function TaskWorkspace() {
     }
   }, [submission]);
 
-  // Phase 1: 1000ms Debounced Autosave
+  // Phase 1 & 2: 1000ms Debounced Autosave
   useEffect(() => {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
@@ -231,7 +237,7 @@ export default function TaskWorkspace() {
     return () => clearTimeout(debounceTimer);
   }, [content, id, dbUser, submission, performSave]);
 
-  // Phase 1: 5-Second Background Periodic Backup Save
+  // Phase 1 & 2: 5-Second Background Periodic Backup Save
   useEffect(() => {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
@@ -246,7 +252,7 @@ export default function TaskWorkspace() {
     return () => clearInterval(backupInterval);
   }, [id, dbUser, submission, performSave]);
 
-  // Phase 1: Event Triggers (Blur, Visibility Change, Page Unload)
+  // Phase 1 & 2: Event Triggers (Blur, Visibility Change, Page Unload)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
@@ -254,13 +260,8 @@ export default function TaskWorkspace() {
       }
     };
     const handleBeforeUnload = () => {
-      // Synchronous LocalStorage Backup before unload
-      if (contentRef.current && !isSubmittedRef.current) {
-        try {
-          localStorage.setItem(localDraftKey, contentRef.current);
-        } catch (e) {
-          console.error(e);
-        }
+      if (contentRef.current && !isSubmittedRef.current && id && dbUser) {
+        saveLocalDraft(id, dbUser.id, contentRef.current, false).catch(console.error);
       }
     };
 
@@ -271,19 +272,16 @@ export default function TaskWorkspace() {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [performSave, localDraftKey]);
+  }, [performSave, id, dbUser]);
 
-  // Fast Instant Local Input Change Handler (0ms Latency)
+  // Fast Instant Local Input Change Handler (0ms Latency + IndexedDB Write)
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     setContent(newVal);
     contentRef.current = newVal;
     
-    // Save to local cache synchronously for instant protection
-    try {
-      localStorage.setItem(localDraftKey, newVal);
-    } catch (err) {
-      console.error('Local storage write error:', err);
+    if (id && dbUser && !isSubmittedRef.current) {
+      saveLocalDraft(id, dbUser.id, newVal, false).catch(console.error);
     }
   };
 
@@ -355,7 +353,10 @@ export default function TaskWorkspace() {
       setSubmission({ ...res, status: 'submitted' });
       lastSavedContentRef.current = content;
       setSaveStatus('saved');
-      localStorage.removeItem(localDraftKey);
+      
+      // Clear local draft upon final submission
+      await clearLocalDraft(id, dbUser.id);
+      
       setToastNotification('🎉 Essay successfully submitted! Your teacher has received your response and will evaluate it soon.');
       setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
@@ -500,7 +501,7 @@ export default function TaskWorkspace() {
             <div className="pt-2 text-xs text-slate-400 space-y-1">
               <p>• Minimum recommended words: {task.ieltsType === 'task1' ? '150 words' : '250 words'}</p>
               <p>• Copying & pasting text is strictly disabled.</p>
-              <p>• Fast Instant Save: Edits save locally immediately and sync automatically.</p>
+              <p>• Zero-Data-Loss Active: Automatic IndexedDB + Cloud protection.</p>
             </div>
           </div>
 
@@ -581,7 +582,7 @@ export default function TaskWorkspace() {
                 <span>Response Workspace</span>
               </div>
 
-              {/* Phase 1 Live Save Status Badge */}
+              {/* Live Save Status Badge */}
               <div className="flex items-center space-x-2 font-medium">
                 {isReadOnly ? (
                   <span className="text-slate-400">Read-only</span>
@@ -590,7 +591,7 @@ export default function TaskWorkspace() {
                     <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Saving...
                   </span>
                 ) : saveStatus === 'offline' || !isOnline ? (
-                  <span className="text-amber-300 flex items-center" title="Offline mode: Changes saved in local browser memory">
+                  <span className="text-amber-300 flex items-center" title="Offline mode: Changes saved in IndexedDB & browser memory">
                     <WifiOff className="w-3 h-3 mr-1 text-amber-400" /> Offline (Saved locally)
                   </span>
                 ) : saveStatus === 'error' ? (
