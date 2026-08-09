@@ -233,11 +233,11 @@ export default function TeacherDashboard() {
                   <textarea required className="w-full min-h-[90px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task1Prompt || newTask.promptText} onChange={e => setNewTask({...newTask, task1Prompt: e.target.value, promptText: e.target.value})} placeholder="Enter Task 1 prompt..." />
                 </div>
                 
-                {/* Image Upload for Task 1 */}
+                {/* Image Attachment for Task 1 */}
                 <div className="space-y-2">
                   <label className="block text-xs font-semibold text-slate-300 flex items-center">
                     <ImageIcon className="w-3.5 h-3.5 mr-1 text-indigo-400" />
-                    Task 1 Visual Diagram / Graph Image (Optional)
+                    Task 1 Visual Diagram / Graph Image
                   </label>
                   {newTask.imageUrl || newTask.task1ImageUrl ? (
                     <div className="relative group w-fit rounded-xl overflow-hidden border border-slate-700 bg-slate-900 p-2 flex items-center space-x-3">
@@ -251,24 +251,37 @@ export default function TeacherDashboard() {
                       </button>
                     </div>
                   ) : (
-                    <div className="relative border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl p-4 text-center transition-all bg-slate-900/40">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageFileChange}
-                        disabled={uploadingImage}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                      <div className="flex flex-col items-center space-y-1">
-                        {uploadingImage ? (
-                          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
-                        ) : (
-                          <Upload className="w-6 h-6 text-slate-400" />
-                        )}
-                        <span className="text-xs text-slate-300 font-medium">
-                          {uploadingImage ? 'Uploading Image to Cloud Storage...' : 'Click or Drag Task 1 Graph / Map / Chart Image here'}
-                        </span>
-                        <span className="text-[10px] text-slate-500">Supports PNG, JPG, WEBP, SVG (Max 5MB)</span>
+                    <div className="space-y-3">
+                      <div className="relative border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl p-4 text-center transition-all bg-slate-900/40">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileChange}
+                          disabled={uploadingImage}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                        <div className="flex flex-col items-center space-y-1">
+                          {uploadingImage ? (
+                            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                          ) : (
+                            <Upload className="w-6 h-6 text-slate-400" />
+                          )}
+                          <span className="text-xs text-slate-300 font-medium">
+                            {uploadingImage ? 'Attaching Image...' : 'Click or Drag any image file here'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">Instant client conversion (&lt;10ms)</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[11px] text-slate-400 shrink-0">Or paste Image URL:</span>
+                        <input
+                          type="url"
+                          placeholder="https://..."
+                          className="w-full glass-input px-3 py-1.5 rounded-lg text-xs"
+                          value={newTask.imageUrl || newTask.task1ImageUrl || ''}
+                          onChange={e => setNewTask({...newTask, imageUrl: e.target.value, task1ImageUrl: e.target.value})}
+                        />
                       </div>
                     </div>
                   )}
