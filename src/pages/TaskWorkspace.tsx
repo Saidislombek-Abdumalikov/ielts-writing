@@ -721,6 +721,17 @@ export default function TaskWorkspace() {
             </div>
           )}
 
+          {/* Full Screen Button in Top Menu Bar */}
+          <button 
+            type="button"
+            onClick={toggleFullscreen}
+            className="glass-card hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-xl border border-slate-700/60 text-xs font-semibold flex items-center transition-all shadow-sm text-slate-300 dark:text-slate-200"
+            title="Toggle Full Screen Mode (F11)"
+          >
+            <Maximize2 className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+            <span>Full Screen</span>
+          </button>
+
           {/* Shared Exam Timer */}
           {timeLeft !== null && !isSubmitted && (
             <div className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border text-sm font-mono font-bold shadow-md ${
@@ -840,19 +851,7 @@ export default function TaskWorkspace() {
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
                   </span>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFullscreen();
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold flex items-center transition-all shadow-sm"
-                      title="Toggle Full Screen Mode (F11)"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5 mr-1" /> Full Screen (F11)
-                    </button>
-                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Click diagram to enlarge</span>
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
