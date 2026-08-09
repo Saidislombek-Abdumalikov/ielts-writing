@@ -700,6 +700,34 @@ export default function TaskWorkspace() {
         </button>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Mock Exam Tab Navigation Header inside Top Header Bar */}
+          {isMock && (
+            <div className="flex bg-slate-900/60 dark:bg-slate-900 p-1 rounded-xl border border-slate-700/60 text-xs font-semibold">
+              <button 
+                onClick={() => handleTabSwitch('task1')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'task1' 
+                    ? 'bg-indigo-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Task 1 ({t1Wc}w)</span>
+              </button>
+              <button 
+                onClick={() => handleTabSwitch('task2')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
+                  activeTab === 'task2' 
+                    ? 'bg-indigo-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Task 2 ({t2Wc}w)</span>
+              </button>
+            </div>
+          )}
+
           {/* Shared Exam Timer */}
           {timeLeft !== null && !isSubmitted && (
             <div className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border text-sm font-mono font-bold shadow-md ${
@@ -717,20 +745,12 @@ export default function TaskWorkspace() {
             <span className="text-indigo-400 font-semibold">{isMock ? totalMockWc : currentWc}</span>
           </div>
 
-          {/* Student UX Save Status Badge */}
+          {/* Pale & Unobtrusive Save Status Badge */}
           {!isSubmitted && (
-            <div className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center border transition-all ${
-              saveStatus === 'saved'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : saveStatus === 'saving'
-                ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 animate-pulse'
-                : saveStatus === 'offline'
-                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                : 'bg-red-500/10 text-red-400 border-red-500/30'
-            }`}>
-              {saveStatus === 'saved' && <><CheckCircle className="w-3.5 h-3.5 mr-1.5 text-emerald-400" /> ✓ Saved</>}
-              {saveStatus === 'saving' && <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-indigo-400" /> Saving...</>}
-              {saveStatus === 'offline' && <><WifiOff className="w-3.5 h-3.5 mr-1.5 text-amber-400" /> Offline — saved locally</>}
+            <div className="px-2 py-1 rounded-lg text-[11px] font-normal text-slate-400/80 dark:text-slate-500/80 flex items-center space-x-1">
+              {saveStatus === 'saved' && <><CheckCircle className="w-3 h-3 text-emerald-500/60" /> <span>Saved</span></>}
+              {saveStatus === 'saving' && <><RefreshCw className="w-3 h-3 animate-spin text-slate-400/60" /> <span>Saving...</span></>}
+              {saveStatus === 'offline' && <><WifiOff className="w-3 h-3 text-amber-500/70" /> <span>Offline</span></>}
             </div>
           )}
 
@@ -773,34 +793,6 @@ export default function TaskWorkspace() {
           )}
         </div>
       </div>
-
-      {/* Mock Exam Tab Navigation Header */}
-      {isMock && (
-        <div className="flex bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs sm:text-sm font-semibold max-w-md mx-auto shadow-lg">
-          <button 
-            onClick={() => handleTabSwitch('task1')}
-            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center space-x-2 ${
-              activeTab === 'task1' 
-                ? 'bg-indigo-600 text-white shadow-lg' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>Task 1 Report ({t1Wc} words)</span>
-          </button>
-          <button 
-            onClick={() => handleTabSwitch('task2')}
-            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center space-x-2 ${
-              activeTab === 'task2' 
-                ? 'bg-indigo-600 text-white shadow-lg' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Edit3 className="w-4 h-4" />
-            <span>Task 2 Essay ({t2Wc} words)</span>
-          </button>
-        </div>
-      )}
 
       {/* Integrity / Anti-Cheat Warning Badge for Student */}
       {(pasteAttempts > 0 || suspiciousBurst) && (
