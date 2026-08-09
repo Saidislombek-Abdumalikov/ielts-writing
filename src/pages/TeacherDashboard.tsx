@@ -240,15 +240,20 @@ export default function TeacherDashboard() {
                     Task 1 Visual Diagram / Graph Image
                   </label>
                   {newTask.imageUrl || newTask.task1ImageUrl ? (
-                    <div className="relative group w-fit rounded-xl overflow-hidden border border-slate-700 bg-slate-900 p-2 flex items-center space-x-3">
-                      <img src={newTask.imageUrl || newTask.task1ImageUrl} alt="Task 1 preview" className="h-16 w-24 object-cover rounded-lg" />
-                      <button
-                        type="button"
-                        onClick={() => setNewTask({...newTask, imageUrl: '', task1ImageUrl: ''})}
-                        className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-xs flex items-center"
-                      >
-                        <X className="w-4 h-4 mr-1" /> Remove Image
-                      </button>
+                    <div className="relative group w-full rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 p-3 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-indigo-300">Attached Diagram Preview</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewTask({...newTask, imageUrl: '', task1ImageUrl: ''})}
+                          className="px-2 py-1 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-xs flex items-center"
+                        >
+                          <X className="w-3.5 h-3.5 mr-1" /> Remove Image
+                        </button>
+                      </div>
+                      <div className="w-full min-h-[240px] max-h-[340px] bg-slate-900 rounded-xl p-2 flex items-center justify-center border border-slate-800">
+                        <img src={newTask.imageUrl || newTask.task1ImageUrl} alt="Task 1 preview" className="w-full h-full object-contain rounded-lg" />
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-3">

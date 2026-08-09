@@ -507,23 +507,35 @@ export default function EvaluationWorkspace() {
                 </div>
               </div>
 
-              {/* Task 1 Diagram Preview for Teacher */}
+              {/* Task 1 Diagram Display for Teacher */}
               {(task?.imageUrl || task?.task1ImageUrl) && (
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <img src={task.task1ImageUrl || task.imageUrl} alt="Task 1 Diagram" className="h-12 w-16 object-cover rounded-lg border border-slate-700" />
-                    <div>
-                      <span className="text-xs font-semibold text-indigo-300 block">Task 1 Visual Diagram</span>
-                      <span className="text-[10px] text-slate-400">Click preview to view diagram in full resolution</span>
+                <div className="space-y-2 p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-300 flex items-center">
+                      <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Visual Diagram / Map / Chart
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowLightbox(true)}
+                      className="px-3 py-1 rounded-xl glass-card text-xs text-indigo-300 hover:text-white font-semibold flex items-center border border-indigo-500/30"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Expand Lightbox Zoom
+                    </button>
+                  </div>
+
+                  <div 
+                    onClick={() => setShowLightbox(true)}
+                    className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[300px] sm:min-h-[400px] max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-3 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  >
+                    <img 
+                      src={task.task1ImageUrl || task.imageUrl} 
+                      alt="Task 1 Visual Diagram" 
+                      className="w-full h-full object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                    />
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
+                      <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Full Screen Lightbox Zoom
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowLightbox(true)}
-                    className="px-3 py-1.5 rounded-xl glass-card text-xs text-indigo-300 hover:text-white font-semibold flex items-center border border-indigo-500/30"
-                  >
-                    <ZoomIn className="w-3.5 h-3.5 mr-1 text-indigo-400" /> View Diagram
-                  </button>
                 </div>
               )}
 
