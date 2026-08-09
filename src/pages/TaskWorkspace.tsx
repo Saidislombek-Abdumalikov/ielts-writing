@@ -159,90 +159,99 @@ export default function TaskWorkspace() {
         if (!taskData) { setError('Task not found'); return; }
         setTask(taskData);
 
-        let subData: any = null;
-        try {
-          subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
-          if (subData) {
-            setSubmission(subData);
-            if (subData.status === 'submitted' || subData.status === 'graded') {
-              isSubmittedRef.current = true;
+          let subData: any = null;
+          try {
+            subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
+            if (subData) {
+              setSubmission(subData);
+              if (subData.status === 'submitted' || subData.status === 'graded') {
+                isSubmittedRef.current = true;
+              } else {
+                isSubmittedRef.current = false;
+              }
+            } else {
+              isSubmittedRef.current = false;
+            }
+          } catch {
+            isSubmittedRef.current = false;
+          }
+
+          // Fetch local draft from IndexedDB/LocalStorage for zero-data-loss protection
+          const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
+          const localText = localDraftRecord?.content || '';
+          const serverText = subData?.content || '';
+
+          let initialText = serverText;
+          if (localText && localText !== serverText && !isSubmittedRef.current) {
+            const localTime = localDraftRecord?.updatedAt || 0;
+            const serverTime = subData?.updatedAt ? new Date(subData.updatedAt).getTime() : 0;
+
+            if (localTime > serverTime || localText.length > serverText.length) {
+              initialText = localText;
+              setToastNotification('⚡ Unsaved local draft recovered from browser memory!');
+              setTimeout(() => setToastNotification(''), 5000);
             }
           }
-        } catch {
-          // No server submission record yet
-        }
 
-        // Fetch local draft from IndexedDB/LocalStorage for zero-data-loss protection
-        const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
-        const localText = localDraftRecord?.content || '';
-        const serverText = subData?.content || '';
-
-        let initialText = serverText;
-        if (localText && localText !== serverText && !isSubmittedRef.current) {
-          const localTime = localDraftRecord?.updatedAt || 0;
-          const serverTime = subData?.updatedAt ? new Date(subData.updatedAt).getTime() : 0;
-
-          if (localTime > serverTime || localText.length > serverText.length) {
-            initialText = localText;
-            setToastNotification('⚡ Unsaved local draft recovered from browser memory!');
-            setTimeout(() => setToastNotification(''), 5000);
-          }
-        }
-
-        const isMock = taskData.ieltsType === 'mock';
-        if (isMock) {
-          const t1 = subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
-          const t2 = subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
-          setTask1Content(t1);
-          setTask2Content(t2);
-          task1ContentRef.current = t1;
-          task2ContentRef.current = t2;
-          setContent(t1);
-          contentRef.current = t1;
-        } else {
-          setContent(initialText);
-          contentRef.current = initialText;
-        }
-
-        lastSavedContentRef.current = serverText;
-        setPasteAttempts(subData?.pasteAttemptCount || 0);
-        setSuspiciousBurst(subData?.suspiciousBurstFlag || false);
-
-        // Phase 3: Server-Controlled Timer Calculations
-        if (taskData.timerMinutes) {
-          const nowMs = Date.now();
-          const totalSecs = taskData.timerMinutes * 60;
-          
-          let startedMs = subData?.startedAt ? new Date(subData.startedAt).getTime() : null;
-          let expiresMs = subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null;
-
-          const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
-
-          if (!startedMs) {
-            const storedStart = localStorage.getItem(timerStorageKey);
-            startedMs = storedStart ? parseInt(storedStart, 10) : nowMs;
-            localStorage.setItem(timerStorageKey, startedMs.toString());
+          const isMock = taskData.ieltsType === 'mock';
+          if (isMock) {
+            const t1 = subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
+            const t2 = subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
+            setTask1Content(t1);
+            setTask2Content(t2);
+            task1ContentRef.current = t1;
+            task2ContentRef.current = t2;
+            setContent(t1);
+            contentRef.current = t1;
+          } else {
+            setContent(initialText);
+            contentRef.current = initialText;
           }
 
-          if (!expiresMs) {
-            expiresMs = startedMs + (totalSecs * 1000);
+          lastSavedContentRef.current = serverText;
+          setPasteAttempts(subData?.pasteAttemptCount || 0);
+          setSuspiciousBurst(subData?.suspiciousBurstFlag || false);
+
+          // Phase 3: Server-Controlled Timer Calculations & Re-Open Reset
+          if (taskData.timerMinutes && !isSubmittedRef.current) {
+            const nowMs = Date.now();
+            const totalSecs = taskData.timerMinutes * 60;
+            const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
+            
+            let startedMs = subData?.startedAt ? new Date(subData.startedAt).getTime() : null;
+            let expiresMs = subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null;
+
+            // If draft was unlocked by teacher, clear old timer key and reset timestamp
+            if (subData?.status === 'draft' && (!subData.startedAt || !subData.expiresAt)) {
+              localStorage.removeItem(timerStorageKey);
+              startedMs = nowMs;
+              expiresMs = startedMs + (totalSecs * 1000);
+              localStorage.setItem(timerStorageKey, startedMs.toString());
+            } else if (!startedMs) {
+              const storedStart = localStorage.getItem(timerStorageKey);
+              startedMs = storedStart ? parseInt(storedStart, 10) : nowMs;
+              localStorage.setItem(timerStorageKey, startedMs.toString());
+            }
+
+            if (!expiresMs) {
+              expiresMs = startedMs + (totalSecs * 1000);
+            }
+
+            expiresAtMsRef.current = expiresMs;
+
+            // Calculate exact remaining seconds from server/stored expiration timestamp
+            const remainingSecs = Math.max(0, Math.floor((expiresMs - nowMs) / 1000));
+            setTimeLeft(remainingSecs);
+
+            // Initialize submission startedAt/expiresAt if missing
+            if ((!subData?.startedAt || !subData?.expiresAt) && subData?.status !== 'submitted' && subData?.status !== 'graded') {
+              upsertSubmission(id!, dbUser!.id, {
+                startedAt: new Date(startedMs),
+                expiresAt: new Date(expiresMs),
+                status: 'draft'
+              }).catch(console.error);
+            }
           }
-
-          expiresAtMsRef.current = expiresMs;
-
-          // Calculate exact remaining seconds from server/stored expiration timestamp
-          const remainingSecs = Math.max(0, Math.floor((expiresMs - nowMs) / 1000));
-          setTimeLeft(remainingSecs);
-
-          // Initialize submission startedAt/expiresAt if missing
-          if (!subData?.startedAt && !isSubmittedRef.current) {
-            upsertSubmission(id!, dbUser!.id, {
-              startedAt: new Date(startedMs),
-              expiresAt: new Date(expiresMs),
-              status: 'draft'
-            }).catch(console.error);
-          }
-        }
       } catch (err: any) {
         setError(err.message || 'Failed to load task');
       } finally {
@@ -610,6 +619,30 @@ export default function TaskWorkspace() {
             <Edit3 className="w-4 h-4" />
             <span>Task 2 Essay ({t2Wc} words)</span>
           </button>
+        </div>
+      )}
+
+      {/* Integrity / Anti-Cheat Warning Badge for Student */}
+      {(pasteAttempts > 0 || suspiciousBurst) && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs rounded-xl flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Integrity Notice:</strong> Copying and Pasting is disabled during IELTS writing exams.
+            </span>
+          </div>
+          <div className="flex items-center space-x-2 font-mono text-[11px]">
+            {pasteAttempts > 0 && (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                Paste Attempts: {pasteAttempts}
+              </span>
+            )}
+            {suspiciousBurst && (
+              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-semibold">
+                ⚠️ Text Burst Flagged
+              </span>
+            )}
+          </div>
         </div>
       )}
 

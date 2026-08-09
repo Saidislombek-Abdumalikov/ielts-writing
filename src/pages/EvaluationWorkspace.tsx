@@ -190,6 +190,86 @@ export default function EvaluationWorkspace() {
     }
   };
 
+  const downloadAsDoc = () => {
+    if (!selectedSub) return;
+
+    const studentName = selectedSub.student?.name || 'Student';
+    const taskTitle = task?.title || 'IELTS_Writing_Task';
+    const ieltsType = task?.ieltsType === 'mock' ? 'Full Mock Exam (Task 1 + Task 2)' : task?.ieltsType === 'task1' ? 'Task 1 Report' : 'Task 2 Essay';
+    const sub = selectedSub.submission;
+
+    const titleHeader = `IELTS Writing Evaluation — ${studentName}`;
+    const dateStr = sub.submittedAt ? new Date(sub.submittedAt).toLocaleString() : new Date().toLocaleString();
+
+    let bodyContent = `
+      <html xmlns:o='urn:schemas-microsoft-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>${titleHeader}</title>
+        <style>
+          body { font-family: Calibri, Arial, sans-serif; margin: 40px; color: #1e293b; line-height: 1.6; }
+          h1 { color: #4338ca; font-size: 20pt; margin-bottom: 5px; }
+          h2 { color: #1e1b4b; font-size: 15pt; border-bottom: 2px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px; }
+          .meta-box { background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+          .meta-item { font-size: 11pt; margin-bottom: 4px; }
+          .badge { font-weight: bold; color: #047857; font-size: 13pt; }
+          .essay-text { background-color: #ffffff; border: 1px solid #e2e8f0; padding: 16px; font-size: 11pt; white-space: pre-wrap; font-family: Georgia, serif; line-height: 1.7; }
+          .feedback-box { background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 15px; margin-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <h1>${titleHeader}</h1>
+        <div className="meta-box">
+          <div className="meta-item"><strong>Student Name:</strong> ${studentName} (${selectedSub.student?.username || ''})</div>
+          <div className="meta-item"><strong>Assignment Title:</strong> ${taskTitle}</div>
+          <div className="meta-item"><strong>Exam Type:</strong> ${ieltsType}</div>
+          <div className="meta-item"><strong>Submission Date:</strong> ${dateStr}</div>
+          <div className="meta-item"><strong>Total Word Count:</strong> ${sub.wordCount || 0} words</div>
+          ${sub.feedback?.bandScore ? `<div className="meta-item"><strong>Assessed Band Score:</strong> <span className="badge">Band ${sub.feedback.bandScore}</span></div>` : ''}
+        </div>
+    `;
+
+    if (task?.ieltsType === 'mock') {
+      bodyContent += `
+        <h2>TASK 1 REPORT (${sub.task1WordCount || 0} words)</h2>
+        <p><strong>Task 1 Prompt:</strong> ${task.task1Prompt || task.promptText || ''}</p>
+        <div className="essay-text">${(sub.task1Content || 'No Task 1 response submitted.').replace(/\n/g, '<br/>')}</div>
+
+        <h2>TASK 2 ESSAY (${sub.task2WordCount || 0} words)</h2>
+        <p><strong>Task 2 Prompt:</strong> ${task.task2Prompt || ''}</p>
+        <div className="essay-text">${(sub.task2Content || 'No Task 2 response submitted.').replace(/\n/g, '<br/>')}</div>
+      `;
+    } else {
+      bodyContent += `
+        <h2>STUDENT ESSAY RESPONSE</h2>
+        <p><strong>Prompt:</strong> ${task?.promptText || ''}</p>
+        <div className="essay-text">${(sub.content || '').replace(/\n/g, '<br/>')}</div>
+      `;
+    }
+
+    if (sub.feedback?.comments) {
+      bodyContent += `
+        <h2>TEACHER EVALUATION & FEEDBACK</h2>
+        <div className="feedback-box">
+          <strong>Teacher Comments:</strong>
+          <p>${sub.feedback.comments.replace(/\n/g, '<br/>')}</p>
+        </div>
+      `;
+    }
+
+    bodyContent += `</body></html>`;
+
+    const blob = new Blob(['\ufeff' + bodyContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${studentName.replace(/[^a-zA-Z0-9_-]/g, '_')}_${taskTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -440,6 +520,16 @@ export default function EvaluationWorkspace() {
                       Allow Student to Edit (Unlock)
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={downloadAsDoc}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold flex items-center transition-colors shadow-sm"
+                    title="Download complete essay & teacher evaluation report as Microsoft Word (.doc)"
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    Download (.doc)
+                  </button>
 
                   <button
                     type="button"

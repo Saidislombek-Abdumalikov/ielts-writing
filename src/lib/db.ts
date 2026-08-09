@@ -205,16 +205,7 @@ export async function deleteUser(id: string): Promise<void> {
 // ============== SEED ==============
 
 export async function seedDefaultAccounts() {
-  const admin = await getUserByUsername('admin');
-  if (!admin) {
-    await createUser({ name: 'Admin', username: 'admin', password: 'admin1', role: 'admin' });
-    console.log('Admin account seeded');
-  }
-  const teacher = await getUserByUsername('teach');
-  if (!teacher) {
-    await createUser({ name: 'Teacher', username: 'teach', password: '123', role: 'teacher' });
-    console.log('Teacher account seeded');
-  }
+  // Automatic account seeding disabled per prompt requirements.
 }
 
 // ============== TASKS ==============
@@ -408,6 +399,9 @@ export async function updateSubmissionByTeacher(subId: string, data: Partial<{ c
     };
 
     updateData.status = 'draft';
+    updateData.startedAt = null;
+    updateData.expiresAt = null;
+    updateData.submittedAt = null;
     updateData.currentVersion = curVer + 1;
     updateData.versions = [...existingVersions, versionSnapshot];
   } else if (data.status !== undefined) {
@@ -417,14 +411,25 @@ export async function updateSubmissionByTeacher(subId: string, data: Partial<{ c
   await updateDoc(doc(firestore, 'submissions', subId), updateData);
 }
 
-export async function getTaskSubmissions(taskId: string): Promise<{ submissions: any[]; totalStudents: number; submittedCount: number; missingStudents: any[] }> {
-  // Fetch users and task submissions concurrently in parallel
-  const [allUsersSnap, subsSnap] = await Promise.all([
-    getDocs(usersCol()),
-    getDocs(query(subsCol(), where('taskId', '==', taskId)))
-  ]);
+let cachedUsers: any[] | null = null;
+let lastUsersFetch = 0;
 
-  const allUsers = allUsersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+export async function getTaskSubmissions(taskId: string): Promise<{ submissions: any[]; totalStudents: number; submittedCount: number; missingStudents: any[] }> {
+  const now = Date.now();
+  
+  // Cache user list for 60 seconds to prevent heavy repetitive Firestore reads when multiple users write
+  let allUsers: any[] = [];
+  if (!cachedUsers || (now - lastUsersFetch > 60000)) {
+    const allUsersSnap = await getDocs(usersCol());
+    allUsers = allUsersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    cachedUsers = allUsers;
+    lastUsersFetch = now;
+  } else {
+    allUsers = cachedUsers;
+  }
+
+  const subsSnap = await getDocs(query(subsCol(), where('taskId', '==', taskId)));
+
   const allStudents = allUsers.filter((u: any) => u.role?.toLowerCase() === 'student');
 
   const taskSubmissions = subsSnap.docs.map(d => ({
