@@ -507,35 +507,35 @@ export default function EvaluationWorkspace() {
                 </div>
               </div>
 
-              {/* Task 1 Diagram Display for Teacher */}
+              {/* Task 1 Diagram Compact Preview for Teacher */}
               {(task?.imageUrl || task?.task1ImageUrl) && (
-                <div className="space-y-2 p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-300 flex items-center">
-                      <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Visual Diagram / Map / Chart
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowLightbox(true)}
-                      className="px-3 py-1 rounded-xl glass-card text-xs text-indigo-300 hover:text-white font-semibold flex items-center border border-indigo-500/30"
-                    >
-                      <ZoomIn className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Expand Lightbox Zoom
-                    </button>
-                  </div>
-
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-4">
                   <div 
                     onClick={() => setShowLightbox(true)}
-                    className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[300px] sm:min-h-[400px] max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-3 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                    className="relative group cursor-pointer h-20 w-32 shrink-0 bg-slate-950 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center p-1"
                   >
                     <img 
                       src={task.task1ImageUrl || task.imageUrl} 
-                      alt="Task 1 Visual Diagram" 
-                      className="w-full h-full object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                      alt="Task 1 Diagram" 
+                      className="w-full h-full object-contain rounded"
                     />
-                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
-                      <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Full Screen Lightbox Zoom
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <ZoomIn className="w-4 h-4 text-indigo-300" />
                     </div>
                   </div>
+
+                  <div className="flex-1">
+                    <span className="text-xs font-bold text-indigo-300 block">Task 1 Visual Diagram</span>
+                    <span className="text-[11px] text-slate-400">Compact teacher reference view. Click preview to open full-screen lightbox.</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLightbox(true)}
+                    className="px-3 py-1.5 rounded-xl glass-card text-xs text-indigo-300 hover:text-white font-semibold flex items-center border border-indigo-500/30 shrink-0"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5 mr-1.5 text-indigo-400" /> Open Full Image
+                  </button>
                 </div>
               )}
 

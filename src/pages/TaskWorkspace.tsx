@@ -692,7 +692,7 @@ export default function TaskWorkspace() {
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
-                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[320px] sm:min-h-[420px] max-h-[560px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-3 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  className="relative w-full min-h-[260px] sm:min-h-[340px] max-h-[440px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-3 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
                     src={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl)} 
