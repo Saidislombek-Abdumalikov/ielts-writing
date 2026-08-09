@@ -23,10 +23,23 @@ export default function TaskWorkspace() {
   const { dbUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
-  const [task, setTask] = useState<any>(null);
+  const [task, setTask] = useState<any>(() => {
+    if (!id) return null;
+    const cached = localStorage.getItem(`task_cache_${id}`);
+    if (cached) {
+      try { return JSON.parse(cached); } catch { return null; }
+    }
+    return null;
+  });
+
   const [submission, setSubmission] = useState<any>(null);
   const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    // If local task cache exists, start with loading = false for 0ms instant render!
+    if (id && localStorage.getItem(`task_cache_${id}`)) return false;
+    return true;
+  });
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
@@ -192,7 +205,7 @@ export default function TaskWorkspace() {
     };
   }, [performSave, triggerPendingSync]);
 
-  // Ultra-Fast Parallelized Workspace Loading & State Recovery
+  // 0ms Instant Local-First Workspace Loading & Silent Background Sync
   useEffect(() => {
     if (authLoading) return;
     if (!id || !dbUser) {
@@ -203,80 +216,100 @@ export default function TaskWorkspace() {
     }
 
     let mounted = true;
-    const safetyTimeout = setTimeout(() => {
-      if (mounted) setLoading(false);
-    }, 2500);
 
-    async function loadWorkspace() {
+    async function loadWorkspaceInstant() {
+      // 1. Instant Local State Hydration (0ms Latency)
+      const [activeExamStateRes, localDraftRecordRes, pendingListRes] = await Promise.all([
+        getActiveExamState(id!, dbUser!.id).catch(() => null),
+        getLocalDraft(id!, dbUser!.id).catch(() => null),
+        getPendingSubmissions(dbUser!.id).catch(() => []),
+      ]);
+
+      if (!mounted) return;
+
+      const cachedTaskRaw = localStorage.getItem(`task_cache_${id!}`);
+      let localTask = cachedTaskRaw ? JSON.parse(cachedTaskRaw) : null;
+      if (localTask) setTask(localTask);
+
+      const pendingForThisTask = (pendingListRes || []).find(p => p.taskId === id! && !p.synced);
+      if (pendingForThisTask) {
+        setIsPendingSync(true);
+        isSubmittedRef.current = true;
+        setSubmission({
+          id: pendingForThisTask.operationId,
+          status: 'submitted',
+          content: pendingForThisTask.content,
+          task1Content: pendingForThisTask.task1Content,
+          task2Content: pendingForThisTask.task2Content,
+          wordCount: pendingForThisTask.wordCount,
+          submittedAt: new Date(pendingForThisTask.submittedAtLocal),
+        });
+      }
+
+      const localText = activeExamStateRes?.content || localDraftRecordRes?.content || '';
+      if (localText && !isSubmittedRef.current) {
+        const restoredTab = activeExamStateRes?.activeTab || 'task1';
+        setActiveTab(restoredTab);
+
+        if (localTask?.ieltsType === 'mock') {
+          const t1 = activeExamStateRes?.task1Content || (localText.includes('--- TASK 1 ---') ? localText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : localText);
+          const t2 = activeExamStateRes?.task2Content || (localText.includes('--- TASK 2 ---') ? localText.split('--- TASK 2 ---')[1].trim() : '');
+          setTask1Content(t1);
+          setTask2Content(t2);
+          task1ContentRef.current = t1;
+          task2ContentRef.current = t2;
+          const cur = restoredTab === 'task1' ? t1 : t2;
+          setContent(cur);
+          contentRef.current = cur;
+        } else {
+          setContent(localText);
+          contentRef.current = localText;
+        }
+      }
+
+      // If local task or draft exists, show screen IMMEDIATELY with 0ms delay!
+      if (localTask || localText) {
+        setLoading(false);
+      }
+
+      // 2. Background Network Sync (Silent, non-blocking)
       try {
-        setLoading(true);
-
-        // Fetch task, pending submissions, student submission with feedback, active exam state, and local draft concurrently in parallel
-        const [taskRes, pendingListRes, subRes, activeExamStateRes, localDraftRecordRes] = await Promise.all([
-          getTaskById(id!).catch(() => null),
-          getPendingSubmissions(dbUser!.id).catch(() => []),
+        const [taskData, subData] = await Promise.all([
+          getTaskById(id!).catch(() => localTask),
           getStudentSubmissionWithFeedback(id!, dbUser!.id).catch(() => null),
-          getActiveExamState(id!, dbUser!.id).catch(() => null),
-          getLocalDraft(id!, dbUser!.id).catch(() => null),
         ]);
 
         if (!mounted) return;
 
-        let taskData = taskRes;
-        if (!taskData) {
-          if (!localDraftRecordRes) {
-            setError('Task not found');
-            setLoading(false);
-            return;
-          }
-          taskData = { id: id!, title: 'IELTS Writing Assignment', ieltsType: 'task2', promptText: 'Writing prompt saved locally' };
-        }
-        setTask(taskData);
-
-        // Check Pending Offline Submission Snapshot
-        const pendingForThisTask = (pendingListRes || []).find(p => p.taskId === id! && !p.synced);
-        if (pendingForThisTask) {
-          setIsPendingSync(true);
-          isSubmittedRef.current = true;
-          setSubmission({
-            id: pendingForThisTask.operationId,
-            status: 'submitted',
-            content: pendingForThisTask.content,
-            task1Content: pendingForThisTask.task1Content,
-            task2Content: pendingForThisTask.task2Content,
-            wordCount: pendingForThisTask.wordCount,
-            submittedAt: new Date(pendingForThisTask.submittedAtLocal),
-          });
+        if (taskData) {
+          setTask(taskData);
+        } else if (!localTask && !localText) {
+          setError('Task not found');
+          setLoading(false);
+          return;
         }
 
-        let subData = subRes;
         if (subData) {
           setSubmission(subData);
           if (subData.status === 'submitted' || subData.status === 'graded') {
             isSubmittedRef.current = true;
-          } else {
-            isSubmittedRef.current = false;
           }
         }
 
-        const activeExamState = activeExamStateRes;
-        const localDraftRecord = localDraftRecordRes;
-        
-        const localText = activeExamState?.content || localDraftRecord?.content || '';
+        const effectiveTask = taskData || localTask;
         const serverText = subData?.content || '';
-
         let initialText = serverText;
         if (localText && localText !== serverText && !isSubmittedRef.current) {
           initialText = localText;
         }
 
-        const isMock = taskData.ieltsType === 'mock';
-        const restoredTab = activeExamState?.activeTab || 'task1';
+        const isMock = effectiveTask?.ieltsType === 'mock';
+        const restoredTab = activeExamStateRes?.activeTab || 'task1';
         setActiveTab(restoredTab);
 
         if (isMock) {
-          const t1 = activeExamState?.task1Content || subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
-          const t2 = activeExamState?.task2Content || subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
+          const t1 = activeExamStateRes?.task1Content || subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
+          const t2 = activeExamStateRes?.task2Content || subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
           setTask1Content(t1);
           setTask2Content(t2);
           task1ContentRef.current = t1;
@@ -290,17 +323,17 @@ export default function TaskWorkspace() {
         }
 
         lastSavedContentRef.current = serverText;
-        setPasteAttempts(activeExamState?.pasteAttemptCount || subData?.pasteAttemptCount || 0);
-        setSuspiciousBurst(activeExamState?.suspiciousBurstFlag || subData?.suspiciousBurstFlag || false);
+        setPasteAttempts(activeExamStateRes?.pasteAttemptCount || subData?.pasteAttemptCount || 0);
+        setSuspiciousBurst(activeExamStateRes?.suspiciousBurstFlag || subData?.suspiciousBurstFlag || false);
 
         // Server-Controlled Timer Calculations & Recovery
-        if (taskData.timerMinutes && !isSubmittedRef.current) {
+        if (effectiveTask?.timerMinutes && !isSubmittedRef.current) {
           const nowMs = Date.now();
-          const totalSecs = taskData.timerMinutes * 60;
+          const totalSecs = effectiveTask.timerMinutes * 60;
           const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
           
-          let startedMs = activeExamState?.startedAtMs || (subData?.startedAt ? new Date(subData.startedAt).getTime() : null);
-          let expiresMs = activeExamState?.expiresAtMs || (subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null);
+          let startedMs = activeExamStateRes?.startedAtMs || (subData?.startedAt ? new Date(subData.startedAt).getTime() : null);
+          let expiresMs = activeExamStateRes?.expiresAtMs || (subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null);
 
           if (subData?.status === 'draft' && (!subData.startedAt || !subData.expiresAt)) {
             localStorage.removeItem(timerStorageKey);
@@ -332,17 +365,16 @@ export default function TaskWorkspace() {
           }
         }
       } catch (err: any) {
-        if (mounted) setError(err.message || 'Failed to load task workspace');
+        if (mounted && !localTask) setError(err.message || 'Failed to load task workspace');
       } finally {
         if (mounted) setLoading(false);
-        clearTimeout(safetyTimeout);
       }
     }
-    loadWorkspace();
+
+    loadWorkspaceInstant();
 
     return () => {
       mounted = false;
-      clearTimeout(safetyTimeout);
     };
   }, [id, dbUser, authLoading, navigate]);
 
@@ -593,7 +625,7 @@ export default function TaskWorkspace() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center space-y-3">
         <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-slate-400 font-medium">Loading IELTS Exam Workspace...</p>
+        <p className="text-xs text-slate-400 font-medium">Opening IELTS Exam Workspace...</p>
       </div>
     );
   }
@@ -610,14 +642,14 @@ export default function TaskWorkspace() {
   }
 
   const now = new Date();
-  const startDate = task.startDate ? new Date(task.startDate) : null;
-  const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+  const startDate = task?.startDate ? new Date(task.startDate) : null;
+  const dueDate = task?.dueDate ? new Date(task.dueDate) : null;
 
   const isNotStarted = startDate && now < startDate;
   const isPastDue = dueDate && now > dueDate;
   const isSubmitted = submission?.status === 'submitted' || submission?.status === 'graded';
 
-  const isMock = task.ieltsType === 'mock';
+  const isMock = task?.ieltsType === 'mock';
   const currentWc = content.trim() ? content.trim().split(/\s+/).length : 0;
   const t1Wc = task1Content.trim() ? task1Content.trim().split(/\s+/).length : (activeTab === 'task1' ? currentWc : 0);
   const t2Wc = task2Content.trim() ? task2Content.trim().split(/\s+/).length : (activeTab === 'task2' ? currentWc : 0);
@@ -798,27 +830,27 @@ export default function TaskWorkspace() {
               <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 {isMock 
                   ? (activeTab === 'task1' ? 'Task 1 (Report - 150w min)' : 'Task 2 (Essay - 250w min)')
-                  : (task.ieltsType === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)')
+                  : (task?.ieltsType === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)')
                 }
               </span>
-              {task.assignmentMode === 'partly' && (
+              {task?.assignmentMode === 'partly' && (
                 <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   Focus: {task.focusLabel || 'Partly'}
                 </span>
               )}
             </div>
 
-            <h1 className="text-xl sm:text-2xl font-bold">{task.title}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">{task?.title || 'IELTS Writing Task'}</h1>
 
             <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
               {isMock 
-                ? (activeTab === 'task1' ? (task.task1Prompt || task.promptText) : (task.task2Prompt || task.promptText))
-                : task.promptText
+                ? (activeTab === 'task1' ? (task?.task1Prompt || task?.promptText) : (task?.task2Prompt || task?.promptText))
+                : task?.promptText
               }
             </div>
 
             {/* Task 1 Consistent Responsive Image Frame */}
-            {((isMock && activeTab === 'task1' && (task.task1ImageUrl || task.imageUrl)) || (!isMock && task.ieltsType === 'task1' && task.imageUrl)) && (
+            {((isMock && activeTab === 'task1' && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.ieltsType === 'task1' && task?.imageUrl)) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
@@ -831,7 +863,7 @@ export default function TaskWorkspace() {
                   className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[300px] sm:min-h-[380px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
-                    src={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl)} 
+                    src={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
                     alt="Task 1 Prompt Visual Graph" 
                     className="w-full h-full object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
                   />

@@ -240,15 +240,32 @@ export async function getAllTasks(): Promise<DbTask[]> {
 }
 
 export async function getTaskById(id: string): Promise<DbTask | null> {
-  const d = await getDoc(doc(firestore, 'tasks', id));
-  if (!d.exists()) return null;
-  return {
-    id: d.id,
-    ...d.data(),
-    startDate: toDate(d.data().startDate),
-    dueDate: toDateRequired(d.data().dueDate),
-    createdAt: toDateRequired(d.data().createdAt),
-  } as DbTask;
+  try {
+    const d = await getDoc(doc(firestore, 'tasks', id));
+    if (!d.exists()) return null;
+    const taskObj: DbTask = {
+      id: d.id,
+      ...d.data(),
+      startDate: toDate(d.data().startDate),
+      dueDate: toDateRequired(d.data().dueDate),
+      createdAt: toDateRequired(d.data().createdAt),
+    } as DbTask;
+
+    try {
+      localStorage.setItem(`task_cache_${id}`, JSON.stringify(taskObj));
+    } catch {
+      // Ignore quota errors
+    }
+
+    return taskObj;
+  } catch (e) {
+    console.warn('Network task fetch fail, checking local cache:', e);
+    const cached = localStorage.getItem(`task_cache_${id}`);
+    if (cached) {
+      try { return JSON.parse(cached) as DbTask; } catch { /* Ignore */ }
+    }
+    return null;
+  }
 }
 
 export async function createTask(teacherId: string, data: any): Promise<DbTask> {
