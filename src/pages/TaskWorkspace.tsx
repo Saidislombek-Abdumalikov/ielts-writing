@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
 import { getTaskById, getStudentSubmissionWithFeedback, upsertSubmission } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
-  CheckCircle, FileText, Sparkles, Image as ImageIcon, ShieldAlert, Lock
+  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
+
+type SaveStatus = 'saved' | 'saving' | 'offline' | 'error';
 
 export default function TaskWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -23,8 +25,20 @@ export default function TaskWorkspace() {
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [toastNotification, setToastNotification] = useState<string>('');
   
-  // Silent auto-save ref
+  // Phase 1 Architecture: Performance & Save Status
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  
+  // Silent auto-save refs
   const lastSavedContentRef = useRef<string>('');
+  const contentRef = useRef<string>('');
+  const isSubmittedRef = useRef<boolean>(false);
+  const isSavingRef = useRef<boolean>(false);
+
+  // Keep contentRef in sync for event listeners
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
 
   // Anti-cheat metrics
   const [pasteAttempts, setPasteAttempts] = useState(0);
@@ -35,6 +49,77 @@ export default function TaskWorkspace() {
   // Timer
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
+  const localDraftKey = `local_draft_${id}_${dbUser?.id}`;
+
+  // Core Save Function
+  const performSave = useCallback(async (forcedContent?: string) => {
+    const textToSave = forcedContent !== undefined ? forcedContent : contentRef.current;
+    if (!id || !dbUser) return;
+    if (isSubmittedRef.current) return;
+    if (textToSave === lastSavedContentRef.current) {
+      setSaveStatus('saved');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setSaveStatus('offline');
+      // Save locally to localStorage
+      try {
+        localStorage.setItem(localDraftKey, textToSave);
+      } catch (e) {
+        console.error('Local storage write error:', e);
+      }
+      return;
+    }
+
+    try {
+      isSavingRef.current = true;
+      setSaveStatus('saving');
+      const wc = textToSave.trim() ? textToSave.trim().split(/\s+/).length : 0;
+      const res = await upsertSubmission(id, dbUser.id, {
+        content: textToSave,
+        wordCount: wc,
+        pasteAttemptCount: pasteAttempts,
+        suspiciousBurstFlag: suspiciousBurst,
+        status: 'draft'
+      });
+
+      if (!isSubmittedRef.current) {
+        setSubmission(res);
+      }
+      lastSavedContentRef.current = textToSave;
+      setSaveStatus('saved');
+      // Clear synced local draft
+      localStorage.removeItem(localDraftKey);
+    } catch (err) {
+      console.error('Auto-save error:', err);
+      setSaveStatus('error');
+    } finally {
+      isSavingRef.current = false;
+    }
+  }, [id, dbUser, pasteAttempts, suspiciousBurst, localDraftKey]);
+
+  // Network Status Monitor
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      performSave();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSaveStatus('offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [performSave]);
+
+  // Initial Workspace Loading & Local Draft Recovery
   useEffect(() => {
     if (!id || !dbUser) return;
     async function loadWorkspace() {
@@ -43,24 +128,35 @@ export default function TaskWorkspace() {
         const taskData = await getTaskById(id!);
         if (!taskData) { setError('Task not found'); return; }
         setTask(taskData);
-        
-        if (taskData.timerMinutes) {
-          setTimeLeft(taskData.timerMinutes * 60);
-        }
 
         let subData: any = null;
         try {
           subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
           if (subData) {
             setSubmission(subData);
-            const initialText = subData.content || '';
+            const serverText = subData.content || '';
+            
+            // Check if local un-synced draft exists and is newer
+            const localDraft = localStorage.getItem(localDraftKey);
+            const initialText = (localDraft && localDraft.length > serverText.length) ? localDraft : serverText;
+            
             setContent(initialText);
-            lastSavedContentRef.current = initialText;
+            contentRef.current = initialText;
+            lastSavedContentRef.current = serverText;
             setPasteAttempts(subData.pasteAttemptCount || 0);
             setSuspiciousBurst(subData.suspiciousBurstFlag || false);
+
+            if (subData.status === 'submitted' || subData.status === 'graded') {
+              isSubmittedRef.current = true;
+            }
           }
         } catch {
-          // No submission yet
+          // Check local draft fallback if no server submission yet
+          const localDraft = localStorage.getItem(localDraftKey);
+          if (localDraft) {
+            setContent(localDraft);
+            contentRef.current = localDraft;
+          }
         }
 
         if (taskData.timerMinutes) {
@@ -86,14 +182,13 @@ export default function TaskWorkspace() {
       }
     }
     loadWorkspace();
-  }, [id, dbUser]);
+  }, [id, dbUser, localDraftKey]);
 
   // Countdown timer with auto-submit when timer reaches 0
   useEffect(() => {
     if (timeLeft === null || submission?.status === 'submitted' || submission?.status === 'graded') return;
     
     if (timeLeft <= 0) {
-      // Auto-submit essay if timer expires and essay hasn't been submitted yet
       if (!isSubmittedRef.current && content.trim()) {
         handleConfirmSubmit();
       }
@@ -113,45 +208,84 @@ export default function TaskWorkspace() {
     return () => clearInterval(timer);
   }, [timeLeft, submission]);
 
-  // Ref to immediately block auto-saves on submit
-  const isSubmittedRef = useRef(false);
-
+  // Sync isSubmittedRef state
   useEffect(() => {
     if (submission?.status === 'submitted' || submission?.status === 'graded') {
       isSubmittedRef.current = true;
     }
   }, [submission]);
 
-  // Background Auto-Save Every 2.5 Seconds
+  // Phase 1: 1000ms Debounced Autosave
   useEffect(() => {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
     if (submission?.status === 'submitted' || submission?.status === 'graded') return;
     if (content === lastSavedContentRef.current) return;
 
-    const autoSaveTimer = setTimeout(async () => {
-      if (isSubmittedRef.current) return;
+    setSaveStatus('saving');
+    
+    const debounceTimer = setTimeout(() => {
+      performSave();
+    }, 1000);
 
-      try {
-        const wc = content.trim() ? content.trim().split(/\s+/).length : 0;
-        const res = await upsertSubmission(id!, dbUser!.id, {
-          content,
-          wordCount: wc,
-          pasteAttemptCount: pasteAttempts,
-          suspiciousBurstFlag: suspiciousBurst,
-          status: 'draft'
-        });
-        if (!isSubmittedRef.current) {
-          setSubmission(res);
-        }
-        lastSavedContentRef.current = content;
-      } catch (err) {
-        console.error('Silent auto-save error:', err);
+    return () => clearTimeout(debounceTimer);
+  }, [content, id, dbUser, submission, performSave]);
+
+  // Phase 1: 5-Second Background Periodic Backup Save
+  useEffect(() => {
+    if (!id || !dbUser) return;
+    if (isSubmittedRef.current) return;
+    if (submission?.status === 'submitted' || submission?.status === 'graded') return;
+
+    const backupInterval = setInterval(() => {
+      if (contentRef.current !== lastSavedContentRef.current) {
+        performSave();
       }
-    }, 2500);
+    }, 5000);
 
-    return () => clearTimeout(autoSaveTimer);
-  }, [content, id, dbUser, pasteAttempts, suspiciousBurst, submission]);
+    return () => clearInterval(backupInterval);
+  }, [id, dbUser, submission, performSave]);
+
+  // Phase 1: Event Triggers (Blur, Visibility Change, Page Unload)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        performSave();
+      }
+    };
+    const handleBeforeUnload = () => {
+      // Synchronous LocalStorage Backup before unload
+      if (contentRef.current && !isSubmittedRef.current) {
+        try {
+          localStorage.setItem(localDraftKey, contentRef.current);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [performSave, localDraftKey]);
+
+  // Fast Instant Local Input Change Handler (0ms Latency)
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value;
+    setContent(newVal);
+    contentRef.current = newVal;
+    
+    // Save to local cache synchronously for instant protection
+    try {
+      localStorage.setItem(localDraftKey, newVal);
+    } catch (err) {
+      console.error('Local storage write error:', err);
+    }
+  };
 
   // STRICT ANTI-PASTE, ANTI-CUT, ANTI-COPY HANDLERS
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -173,13 +307,11 @@ export default function TaskWorkspace() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Block Ctrl+C / Cmd+C (Copy)
     if ((e.ctrlKey || e.metaKey) && ['c', 'C'].includes(e.key)) {
       e.preventDefault();
       return;
     }
 
-    // Block Ctrl+V / Cmd+V (Paste)
     if ((e.ctrlKey || e.metaKey) && ['v', 'V'].includes(e.key)) {
       e.preventDefault();
       setPasteAttempts(prev => prev + 1);
@@ -187,7 +319,6 @@ export default function TaskWorkspace() {
       return;
     }
 
-    // Block Ctrl+X / Cmd+X (Cut)
     if ((e.ctrlKey || e.metaKey) && ['x', 'X'].includes(e.key)) {
       e.preventDefault();
       return;
@@ -223,6 +354,8 @@ export default function TaskWorkspace() {
       });
       setSubmission({ ...res, status: 'submitted' });
       lastSavedContentRef.current = content;
+      setSaveStatus('saved');
+      localStorage.removeItem(localDraftKey);
       setToastNotification('🎉 Essay successfully submitted! Your teacher has received your response and will evaluate it soon.');
       setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
@@ -273,7 +406,10 @@ export default function TaskWorkspace() {
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <button 
-          onClick={() => navigate('/')} 
+          onClick={() => {
+            performSave();
+            navigate('/');
+          }} 
           className="flex items-center text-sm font-medium text-slate-400 hover:text-white transition-colors w-fit"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -291,6 +427,7 @@ export default function TaskWorkspace() {
               <span>{formatTimer(timeLeft)}</span>
             </div>
           )}
+          
           <div className="glass-card px-3 py-1.5 rounded-xl text-sm font-medium text-slate-300">
             <span className="text-slate-400 mr-2">Words:</span>
             <span className="text-indigo-400 font-semibold">{wordCount}</span>
@@ -363,7 +500,7 @@ export default function TaskWorkspace() {
             <div className="pt-2 text-xs text-slate-400 space-y-1">
               <p>• Minimum recommended words: {task.ieltsType === 'task1' ? '150 words' : '250 words'}</p>
               <p>• Copying & pasting text is strictly disabled.</p>
-              <p>• Your progress auto-saves automatically every 2 seconds.</p>
+              <p>• Fast Instant Save: Edits save locally immediately and sync automatically.</p>
             </div>
           </div>
 
@@ -443,12 +580,39 @@ export default function TaskWorkspace() {
                 <FileText className="w-4 h-4 text-indigo-400" />
                 <span>Response Workspace</span>
               </div>
-              <span>{isReadOnly ? 'Read-only' : 'Live Auto-Save Enabled'}</span>
+
+              {/* Phase 1 Live Save Status Badge */}
+              <div className="flex items-center space-x-2 font-medium">
+                {isReadOnly ? (
+                  <span className="text-slate-400">Read-only</span>
+                ) : saveStatus === 'saving' ? (
+                  <span className="text-amber-400 flex items-center">
+                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Saving...
+                  </span>
+                ) : saveStatus === 'offline' || !isOnline ? (
+                  <span className="text-amber-300 flex items-center" title="Offline mode: Changes saved in local browser memory">
+                    <WifiOff className="w-3 h-3 mr-1 text-amber-400" /> Offline (Saved locally)
+                  </span>
+                ) : saveStatus === 'error' ? (
+                  <button 
+                    onClick={() => performSave()}
+                    className="text-red-400 hover:text-red-300 flex items-center underline"
+                    title="Click to retry saving"
+                  >
+                    <AlertTriangle className="w-3 h-3 mr-1" /> Save failed (Retry)
+                  </button>
+                ) : (
+                  <span className="text-emerald-400 flex items-center">
+                    <CheckCircle className="w-3 h-3 mr-1" /> Saved
+                  </span>
+                )}
+              </div>
             </div>
 
             <textarea 
               value={content}
-              onChange={e => !isReadOnly && setContent(e.target.value)}
+              onChange={handleInputChange}
+              onBlur={() => performSave()}
               onPaste={handlePaste}
               onCut={handleCut}
               onCopy={handleCopy}
