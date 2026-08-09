@@ -8,6 +8,7 @@ import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, Timestamp, setDoc
 } from 'firebase/firestore';
+import { getPendingSubmissions, markPendingSubmissionSynced } from './draftManager';
 
 // ============== TYPES ==============
 
@@ -322,10 +323,33 @@ export async function getStudentSubmission(taskId: string, studentId: string): P
   } as DbSubmission;
 }
 
-export async function upsertSubmission(taskId: string, studentId: string, data: any): Promise<DbSubmission> {
+export async function upsertSubmission(
+  taskId: string,
+  studentId: string,
+  data: Partial<{
+    content: string;
+    task1Content?: string | null;
+    task2Content?: string | null;
+    task1WordCount?: number;
+    task2WordCount?: number;
+    wordCount: number;
+    pasteAttemptCount: number;
+    suspiciousBurstFlag: boolean;
+    status: 'draft' | 'submitted' | 'graded';
+    startedAt?: Date | null;
+    expiresAt?: Date | null;
+    submittedAtDate?: Date | null;
+    operationId?: string;
+  }>
+): Promise<DbSubmission> {
   const existing = await getStudentSubmission(taskId, studentId);
   const now = new Date();
-  
+
+  // Idempotency Protection: check if this operationId was already synchronized
+  if (data.operationId && existing && (existing as any).operationId === data.operationId && existing.status === 'submitted') {
+    return existing;
+  }
+
   if (existing) {
     const currentStatus = existing.status;
     const targetStatus = (currentStatus === 'submitted' || currentStatus === 'graded')
@@ -341,6 +365,7 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
       updatedAt: Timestamp.fromDate(now),
     };
 
+    if (data.operationId) updateData.operationId = data.operationId;
     if (data.task1Content !== undefined) updateData.task1Content = data.task1Content;
     if (data.task2Content !== undefined) updateData.task2Content = data.task2Content;
     if (data.task1WordCount !== undefined) updateData.task1WordCount = data.task1WordCount;
@@ -348,13 +373,17 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
     if (data.startedAt) updateData.startedAt = Timestamp.fromDate(new Date(data.startedAt));
     if (data.expiresAt) updateData.expiresAt = Timestamp.fromDate(new Date(data.expiresAt));
     
-    if (targetStatus === 'submitted' && !existing.submittedAt) {
-      updateData.submittedAt = Timestamp.fromDate(now);
+    if (targetStatus === 'submitted') {
+      const submitDate = data.submittedAtDate || now;
+      if (!existing.submittedAt || data.submittedAtDate) {
+        updateData.submittedAt = Timestamp.fromDate(submitDate);
+      }
     }
 
     await updateDoc(doc(firestore, 'submissions', existing.id), updateData);
-    return { ...existing, ...updateData, updatedAt: now, submittedAt: updateData.submittedAt ? now : existing.submittedAt };
+    return { ...existing, ...updateData, updatedAt: now, submittedAt: updateData.submittedAt ? toDateRequired(updateData.submittedAt) : existing.submittedAt };
   } else {
+    const submitDate = data.submittedAtDate || now;
     const newSub: any = {
       taskId,
       studentId,
@@ -363,11 +392,12 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
       pasteAttemptCount: data.pasteAttemptCount || 0,
       suspiciousBurstFlag: Boolean(data.suspiciousBurstFlag),
       status: data.status || 'draft',
-      submittedAt: data.status === 'submitted' ? Timestamp.fromDate(now) : null,
+      submittedAt: data.status === 'submitted' ? Timestamp.fromDate(submitDate) : null,
       createdAt: Timestamp.fromDate(now),
       updatedAt: Timestamp.fromDate(now),
     };
 
+    if (data.operationId) newSub.operationId = data.operationId;
     if (data.task1Content !== undefined) newSub.task1Content = data.task1Content;
     if (data.task2Content !== undefined) newSub.task2Content = data.task2Content;
     if (data.task1WordCount !== undefined) newSub.task1WordCount = data.task1WordCount;
@@ -378,10 +408,43 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
     const docRef = await addDoc(subsCol(), newSub);
     return {
       id: docRef.id, ...newSub,
-      submittedAt: data.status === 'submitted' ? now : null,
-      createdAt: now, updatedAt: now,
+      submittedAt: newSub.submittedAt ? submitDate : null,
+      createdAt: now,
+      updatedAt: now,
     } as DbSubmission;
   }
+}
+
+export async function syncPendingSubmissions(studentId: string): Promise<number> {
+  const pendings = await getPendingSubmissions(studentId);
+  if (!pendings || pendings.length === 0) return 0;
+
+  let syncedCount = 0;
+  for (const pending of pendings) {
+    try {
+      await upsertSubmission(pending.taskId, pending.studentId, {
+        content: pending.content,
+        task1Content: pending.task1Content,
+        task2Content: pending.task2Content,
+        task1WordCount: pending.task1WordCount,
+        task2WordCount: pending.task2WordCount,
+        wordCount: pending.wordCount,
+        pasteAttemptCount: pending.pasteAttemptCount,
+        suspiciousBurstFlag: pending.suspiciousBurstFlag,
+        status: 'submitted',
+        startedAt: pending.startedAtMs ? new Date(pending.startedAtMs) : null,
+        expiresAt: pending.expiresAtMs ? new Date(pending.expiresAtMs) : null,
+        submittedAtDate: pending.submittedAtLocal ? new Date(pending.submittedAtLocal) : new Date(),
+        operationId: pending.operationId,
+      });
+
+      await markPendingSubmissionSynced(pending.operationId, pending.taskId, pending.studentId);
+      syncedCount++;
+    } catch (e) {
+      console.warn('Sync pending submission retry error:', e);
+    }
+  }
+  return syncedCount;
 }
 
 export async function updateSubmissionByTeacher(subId: string, data: Partial<{ content: string; status: string; wordCount: number }>): Promise<void> {

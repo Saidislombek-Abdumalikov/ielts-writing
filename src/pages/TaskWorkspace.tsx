@@ -1,8 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
-import { getTaskById, getStudentSubmissionWithFeedback, upsertSubmission } from '../lib/db';
-import { saveLocalDraft, getLocalDraft, clearLocalDraft } from '../lib/draftManager';
+import { getTaskById, getStudentSubmissionWithFeedback, upsertSubmission, syncPendingSubmissions } from '../lib/db';
+import { 
+  saveLocalDraft, getLocalDraft, clearLocalDraft,
+  saveActiveExamState, getActiveExamState,
+  savePendingSubmission, getPendingSubmissions, PendingSubmission
+} from '../lib/draftManager';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
@@ -11,7 +15,7 @@ import {
 import ConfirmModal from '../components/ConfirmModal';
 import ImageLightboxModal from '../components/ImageLightboxModal';
 
-type SaveStatus = 'saved' | 'saving' | 'offline' | 'error';
+type SaveStatus = 'saved' | 'saving' | 'offline' | 'pending_sync' | 'error';
 type MockTab = 'task1' | 'task2';
 
 export default function TaskWorkspace() {
@@ -29,14 +33,15 @@ export default function TaskWorkspace() {
   const [toastNotification, setToastNotification] = useState<string>('');
   const [showLightbox, setShowLightbox] = useState(false);
   
-  // Phase 3: Mock Exam Tabs & Dual Content State
+  // Mock Exam Tabs & Dual Content State
   const [activeTab, setActiveTab] = useState<MockTab>('task1');
   const [task1Content, setTask1Content] = useState('');
   const [task2Content, setTask2Content] = useState('');
 
-  // Phase 1 & 2 Architecture: Performance, Save Status & Draft Recovery
+  // Performance, Save Status & Offline Pending Sync
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isPendingSync, setIsPendingSync] = useState<boolean>(false);
   
   // Silent auto-save refs
   const lastSavedContentRef = useRef<string>('');
@@ -50,6 +55,7 @@ export default function TaskWorkspace() {
 
   // Expiration timestamp ref (Server-Controlled Timer)
   const expiresAtMsRef = useRef<number | null>(null);
+  const startedAtMsRef = useRef<number | null>(null);
 
   // Keep refs in sync for event listeners
   useEffect(() => {
@@ -68,7 +74,7 @@ export default function TaskWorkspace() {
   // Shared Exam Timer
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // Core Save Function (IndexedDB + Firestore Sync)
+  // Core Save Function (IndexedDB + Active Exam State + Firestore Sync)
   const performSave = useCallback(async (forcedContent?: string) => {
     const currentActiveText = forcedContent !== undefined ? forcedContent : contentRef.current;
     if (!id || !dbUser) return;
@@ -80,13 +86,27 @@ export default function TaskWorkspace() {
 
     const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : currentActiveText;
 
+    // Persist active exam state locally for refresh & offline recovery
+    saveActiveExamState({
+      taskId: id,
+      studentId: dbUser.id,
+      activeTab: activeTabRef.current,
+      task1Content: t1Text,
+      task2Content: t2Text,
+      content: combinedText,
+      startedAtMs: startedAtMsRef.current || Date.now(),
+      expiresAtMs: expiresAtMsRef.current || (Date.now() + 3600000),
+      pasteAttemptCount: pasteAttempts,
+      suspiciousBurstFlag: suspiciousBurst,
+    }).catch(console.error);
+
+    // Save local draft
+    saveLocalDraft(id, dbUser.id, combinedText, false).catch(console.error);
+
     if (combinedText === lastSavedContentRef.current) {
-      setSaveStatus('saved');
+      setSaveStatus(navigator.onLine ? 'saved' : 'offline');
       return;
     }
-
-    // Always persist to IndexedDB/LocalStorage first
-    saveLocalDraft(id, dbUser.id, combinedText, false).catch(console.error);
 
     if (!navigator.onLine) {
       setSaveStatus('offline');
@@ -119,21 +139,40 @@ export default function TaskWorkspace() {
       lastSavedContentRef.current = combinedText;
       setSaveStatus('saved');
       
-      // Mark local draft as synced with server
       saveLocalDraft(id, dbUser.id, combinedText, true).catch(console.error);
     } catch (err) {
-      console.error('Auto-save error:', err);
-      setSaveStatus('error');
+      console.warn('Auto-save network warning:', err);
+      setSaveStatus('offline');
     } finally {
       isSavingRef.current = false;
     }
   }, [id, dbUser, task, pasteAttempts, suspiciousBurst]);
 
-  // Network Status Monitor
+  // Background Sync Engine (When connection returns)
+  const triggerPendingSync = useCallback(async () => {
+    if (!dbUser) return;
+    try {
+      const syncedCount = await syncPendingSubmissions(dbUser.id);
+      if (syncedCount > 0) {
+        setIsPendingSync(false);
+        setToastNotification('✓ Submitted & synchronized with teacher!');
+        setTimeout(() => setToastNotification(''), 6000);
+        if (id) {
+          const freshSub = await getStudentSubmissionWithFeedback(id, dbUser.id);
+          if (freshSub) setSubmission(freshSub);
+        }
+      }
+    } catch (e) {
+      console.warn('Sync pending error:', e);
+    }
+  }, [dbUser, id]);
+
+  // Network Status Monitor & Automatic Sync on Connection Restoration
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       performSave();
+      triggerPendingSync();
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -143,23 +182,62 @@ export default function TaskWorkspace() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Initial check for pending syncs
+    if (navigator.onLine) {
+      triggerPendingSync();
+    }
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [performSave]);
+  }, [performSave, triggerPendingSync]);
 
-  // Initial Workspace Loading & Server-Controlled Timer & Draft Recovery
+  // Workspace Loading & State Recovery
   useEffect(() => {
     if (!id || !dbUser) return;
     async function loadWorkspace() {
       try {
         setLoading(true);
-        const taskData = await getTaskById(id!);
-        if (!taskData) { setError('Task not found'); return; }
+        let taskData: any = null;
+
+        // Try server task first, or use cached
+        try {
+          taskData = await getTaskById(id!);
+        } catch {
+          // Network fail fallback for task
+        }
+
+        if (!taskData) {
+          // Check local pending / draft to see if task info exists
+          const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
+          if (!localDraftRecord) {
+            setError('Task not found or offline cache unavailable');
+            return;
+          }
+          taskData = { id: id!, title: 'IELTS Writing Assignment', ieltsType: 'task2', promptText: 'Writing prompt saved locally' };
+        }
         setTask(taskData);
 
-          let subData: any = null;
+        // Check Pending Offline Submission Snapshot
+        const pendingList = await getPendingSubmissions(dbUser!.id);
+        const pendingForThisTask = pendingList.find(p => p.taskId === id! && !p.synced);
+        if (pendingForThisTask) {
+          setIsPendingSync(true);
+          isSubmittedRef.current = true;
+          setSubmission({
+            id: pendingForThisTask.operationId,
+            status: 'submitted',
+            content: pendingForThisTask.content,
+            task1Content: pendingForThisTask.task1Content,
+            task2Content: pendingForThisTask.task2Content,
+            wordCount: pendingForThisTask.wordCount,
+            submittedAt: new Date(pendingForThisTask.submittedAtLocal),
+          });
+        }
+
+        let subData: any = null;
+        if (!pendingForThisTask) {
           try {
             subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
             if (subData) {
@@ -175,85 +253,83 @@ export default function TaskWorkspace() {
           } catch {
             isSubmittedRef.current = false;
           }
+        }
 
-          // Fetch local draft from IndexedDB/LocalStorage for zero-data-loss protection
-          const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
-          const localText = localDraftRecord?.content || '';
-          const serverText = subData?.content || '';
+        // Restore Active Exam State locally (Requirements 9, 11, 12, 14)
+        const activeExamState = await getActiveExamState(id!, dbUser!.id);
+        const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
+        
+        const localText = activeExamState?.content || localDraftRecord?.content || '';
+        const serverText = subData?.content || '';
 
-          let initialText = serverText;
-          if (localText && localText !== serverText && !isSubmittedRef.current) {
-            const localTime = localDraftRecord?.updatedAt || 0;
-            const serverTime = subData?.updatedAt ? new Date(subData.updatedAt).getTime() : 0;
+        let initialText = serverText;
+        if (localText && localText !== serverText && !isSubmittedRef.current) {
+          initialText = localText;
+        }
 
-            if (localTime > serverTime || localText.length > serverText.length) {
-              initialText = localText;
-              setToastNotification('⚡ Unsaved local draft recovered from browser memory!');
-              setTimeout(() => setToastNotification(''), 5000);
-            }
+        const isMock = taskData.ieltsType === 'mock';
+        const restoredTab = activeExamState?.activeTab || 'task1';
+        setActiveTab(restoredTab);
+
+        if (isMock) {
+          const t1 = activeExamState?.task1Content || subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
+          const t2 = activeExamState?.task2Content || subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
+          setTask1Content(t1);
+          setTask2Content(t2);
+          task1ContentRef.current = t1;
+          task2ContentRef.current = t2;
+          const currentText = restoredTab === 'task1' ? t1 : t2;
+          setContent(currentText);
+          contentRef.current = currentText;
+        } else {
+          setContent(initialText);
+          contentRef.current = initialText;
+        }
+
+        lastSavedContentRef.current = serverText;
+        setPasteAttempts(activeExamState?.pasteAttemptCount || subData?.pasteAttemptCount || 0);
+        setSuspiciousBurst(activeExamState?.suspiciousBurstFlag || subData?.suspiciousBurstFlag || false);
+
+        // Server-Controlled Timer Calculations & Recovery
+        if (taskData.timerMinutes && !isSubmittedRef.current) {
+          const nowMs = Date.now();
+          const totalSecs = taskData.timerMinutes * 60;
+          const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
+          
+          let startedMs = activeExamState?.startedAtMs || (subData?.startedAt ? new Date(subData.startedAt).getTime() : null);
+          let expiresMs = activeExamState?.expiresAtMs || (subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null);
+
+          if (subData?.status === 'draft' && (!subData.startedAt || !subData.expiresAt)) {
+            localStorage.removeItem(timerStorageKey);
+            startedMs = nowMs;
+            expiresMs = startedMs + (totalSecs * 1000);
+            localStorage.setItem(timerStorageKey, startedMs.toString());
+          } else if (!startedMs) {
+            const storedStart = localStorage.getItem(timerStorageKey);
+            startedMs = storedStart ? parseInt(storedStart, 10) : nowMs;
+            localStorage.setItem(timerStorageKey, startedMs.toString());
           }
 
-          const isMock = taskData.ieltsType === 'mock';
-          if (isMock) {
-            const t1 = subData?.task1Content || (initialText.includes('--- TASK 1 ---') ? initialText.split('--- TASK 2 ---')[0].replace('--- TASK 1 ---', '').trim() : initialText);
-            const t2 = subData?.task2Content || (initialText.includes('--- TASK 2 ---') ? initialText.split('--- TASK 2 ---')[1].trim() : '');
-            setTask1Content(t1);
-            setTask2Content(t2);
-            task1ContentRef.current = t1;
-            task2ContentRef.current = t2;
-            setContent(t1);
-            contentRef.current = t1;
-          } else {
-            setContent(initialText);
-            contentRef.current = initialText;
+          if (!expiresMs) {
+            expiresMs = startedMs + (totalSecs * 1000);
           }
 
-          lastSavedContentRef.current = serverText;
-          setPasteAttempts(subData?.pasteAttemptCount || 0);
-          setSuspiciousBurst(subData?.suspiciousBurstFlag || false);
+          startedAtMsRef.current = startedMs;
+          expiresAtMsRef.current = expiresMs;
 
-          // Phase 3: Server-Controlled Timer Calculations & Re-Open Reset
-          if (taskData.timerMinutes && !isSubmittedRef.current) {
-            const nowMs = Date.now();
-            const totalSecs = taskData.timerMinutes * 60;
-            const timerStorageKey = `task_timer_start_${id!}_${dbUser!.id}`;
-            
-            let startedMs = subData?.startedAt ? new Date(subData.startedAt).getTime() : null;
-            let expiresMs = subData?.expiresAt ? new Date(subData.expiresAt).getTime() : null;
+          const remainingSecs = Math.max(0, Math.floor((expiresMs - nowMs) / 1000));
+          setTimeLeft(remainingSecs);
 
-            // If draft was unlocked by teacher, clear old timer key and reset timestamp
-            if (subData?.status === 'draft' && (!subData.startedAt || !subData.expiresAt)) {
-              localStorage.removeItem(timerStorageKey);
-              startedMs = nowMs;
-              expiresMs = startedMs + (totalSecs * 1000);
-              localStorage.setItem(timerStorageKey, startedMs.toString());
-            } else if (!startedMs) {
-              const storedStart = localStorage.getItem(timerStorageKey);
-              startedMs = storedStart ? parseInt(storedStart, 10) : nowMs;
-              localStorage.setItem(timerStorageKey, startedMs.toString());
-            }
-
-            if (!expiresMs) {
-              expiresMs = startedMs + (totalSecs * 1000);
-            }
-
-            expiresAtMsRef.current = expiresMs;
-
-            // Calculate exact remaining seconds from server/stored expiration timestamp
-            const remainingSecs = Math.max(0, Math.floor((expiresMs - nowMs) / 1000));
-            setTimeLeft(remainingSecs);
-
-            // Initialize submission startedAt/expiresAt if missing
-            if ((!subData?.startedAt || !subData?.expiresAt) && subData?.status !== 'submitted' && subData?.status !== 'graded') {
-              upsertSubmission(id!, dbUser!.id, {
-                startedAt: new Date(startedMs),
-                expiresAt: new Date(expiresMs),
-                status: 'draft'
-              }).catch(console.error);
-            }
+          if ((!subData?.startedAt || !subData?.expiresAt) && subData?.status !== 'submitted' && subData?.status !== 'graded' && navigator.onLine) {
+            upsertSubmission(id!, dbUser!.id, {
+              startedAt: new Date(startedMs),
+              expiresAt: new Date(expiresMs),
+              status: 'draft'
+            }).catch(console.error);
           }
+        }
       } catch (err: any) {
-        setError(err.message || 'Failed to load task');
+        setError(err.message || 'Failed to load task workspace');
       } finally {
         setLoading(false);
       }
@@ -261,7 +337,7 @@ export default function TaskWorkspace() {
     loadWorkspace();
   }, [id, dbUser]);
 
-  // Phase 3: Shared Countdown Timer with Server Expiration Calculation
+  // Countdown Timer
   useEffect(() => {
     if (timeLeft === null || submission?.status === 'submitted' || submission?.status === 'graded') return;
     
@@ -300,13 +376,13 @@ export default function TaskWorkspace() {
     }
   }, [submission]);
 
-  // Phase 1 & 2: 1000ms Debounced Autosave
+  // 1000ms Debounced Autosave
   useEffect(() => {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
     if (submission?.status === 'submitted' || submission?.status === 'graded') return;
 
-    setSaveStatus('saving');
+    setSaveStatus(navigator.onLine ? 'saving' : 'offline');
     
     const debounceTimer = setTimeout(() => {
       performSave();
@@ -315,7 +391,7 @@ export default function TaskWorkspace() {
     return () => clearTimeout(debounceTimer);
   }, [content, id, dbUser, submission, performSave]);
 
-  // Phase 1 & 2: 5-Second Background Periodic Backup Save
+  // 5-Second Periodic Backup
   useEffect(() => {
     if (!id || !dbUser) return;
     if (isSubmittedRef.current) return;
@@ -328,7 +404,7 @@ export default function TaskWorkspace() {
     return () => clearInterval(backupInterval);
   }, [id, dbUser, submission, performSave]);
 
-  // Phase 1 & 2: Event Triggers (Blur, Visibility Change, Page Unload)
+  // Event Triggers (Visibility Change, Page Unload)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
@@ -348,12 +424,11 @@ export default function TaskWorkspace() {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [performSave, id, dbUser]);
+  }, [id, dbUser, performSave]);
 
-  // Handle Tab Switch between Task 1 ↔ Task 2 in Mock Exam
+  // Tab Switch Handler (Task 1 ↔ Task 2)
   const handleTabSwitch = (targetTab: MockTab) => {
     if (targetTab === activeTab) return;
-    performSave();
 
     if (activeTab === 'task1') {
       setTask1Content(content);
@@ -363,42 +438,21 @@ export default function TaskWorkspace() {
       task2ContentRef.current = content;
     }
 
-    const nextText = targetTab === 'task1' ? task1ContentRef.current : task2ContentRef.current;
+    const nextText = targetTab === 'task1' ? task1Content : task2Content;
     setActiveTab(targetTab);
-    activeTabRef.current = targetTab;
     setContent(nextText);
     contentRef.current = nextText;
+
+    performSave(nextText);
   };
 
-  // Fast Instant Local Input Change Handler (0ms Latency + IndexedDB Write)
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newVal = e.target.value;
-    setContent(newVal);
-    contentRef.current = newVal;
-
-    if (task?.ieltsType === 'mock') {
-      if (activeTab === 'task1') {
-        setTask1Content(newVal);
-        task1ContentRef.current = newVal;
-      } else {
-        setTask2Content(newVal);
-        task2ContentRef.current = newVal;
-      }
-    }
-    
-    if (id && dbUser && !isSubmittedRef.current) {
-      saveLocalDraft(id, dbUser.id, newVal, false).catch(console.error);
-    }
-  };
-
-  // STRICT ANTI-PASTE, ANTI-CUT, ANTI-COPY HANDLERS
+  // Anti-Cheat Event Blockers
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     setPasteAttempts(prev => prev + 1);
-    setSuspiciousBurst(true);
   };
 
-  const handleCut = (e: React.ClipboardEvent | React.SyntheticEvent) => {
+  const handleCut = (e: React.ClipboardEvent) => {
     e.preventDefault();
   };
 
@@ -410,69 +464,104 @@ export default function TaskWorkspace() {
     e.preventDefault();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && ['c', 'C'].includes(e.key)) {
-      e.preventDefault();
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && ['v', 'V'].includes(e.key)) {
-      e.preventDefault();
-      setPasteAttempts(prev => prev + 1);
-      setSuspiciousBurst(true);
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && ['x', 'X'].includes(e.key)) {
-      e.preventDefault();
-      return;
-    }
-
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     const now = Date.now();
-    if (now - lastKeyTimeRef.current < 25) {
+    const timeDiff = now - lastKeyTimeRef.current;
+    lastKeyTimeRef.current = now;
+
+    if (timeDiff < 15) {
       charBurstCountRef.current += 1;
-      if (charBurstCountRef.current > 15) {
+      if (charBurstCountRef.current > 8) {
         setSuspiciousBurst(true);
       }
     } else {
       charBurstCountRef.current = 0;
     }
-    lastKeyTimeRef.current = now;
+
+    if ((e.ctrlKey || e.metaKey) && ['v', 'V', 'c', 'C', 'x', 'X', 'a', 'A'].includes(e.key)) {
+      if (['v', 'V'].includes(e.key)) {
+        setPasteAttempts(prev => prev + 1);
+      }
+      e.preventDefault();
+    }
   };
 
-  const currentWc = content.trim() ? content.trim().split(/\s+/).length : 0;
-  const t1Wc = task1Content.trim() ? task1Content.trim().split(/\s+/).length : 0;
-  const t2Wc = task2Content.trim() ? task2Content.trim().split(/\s+/).length : 0;
-  const totalMockWc = t1Wc + t2Wc;
-
+  // Submit Handler with Offline Pending Submission Engine (Requirements 4, 5, 6, 7, 8)
   const handleConfirmSubmit = async () => {
     if (!id || !dbUser) return;
-    setShowConfirmSubmit(false);
-    isSubmittedRef.current = true;
     try {
       setSubmitting(true);
+      setShowConfirmSubmit(false);
+      isSubmittedRef.current = true;
+
       const isMock = task?.ieltsType === 'mock';
       const t1Text = isMock ? (activeTab === 'task1' ? content : task1Content) : content;
       const t2Text = isMock ? (activeTab === 'task2' ? content : task2Content) : '';
-      const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
-      const totalWc = isMock ? (t1Text.trim().split(/\s+/).length + t2Text.trim().split(/\s+/).length) : currentWc;
+      
+      const t1Wc = t1Text.trim() ? t1Text.trim().split(/\s+/).length : 0;
+      const t2Wc = t2Text.trim() ? t2Text.trim().split(/\s+/).length : 0;
+      const totalWc = isMock ? (t1Wc + t2Wc) : (content.trim() ? content.trim().split(/\s+/).length : 0);
 
+      const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
+
+      // Check if Offline when submitting
+      if (!navigator.onLine) {
+        const operationId = `sub_pending_${id}_${dbUser.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const pendingSub: PendingSubmission = {
+          operationId,
+          taskId: id,
+          studentId: dbUser.id,
+          content: combinedText,
+          task1Content: t1Text,
+          task2Content: t2Text,
+          task1WordCount: t1Wc,
+          task2WordCount: t2Wc,
+          wordCount: totalWc,
+          pasteAttemptCount: pasteAttempts,
+          suspiciousBurstFlag: suspiciousBurst,
+          status: 'submitted',
+          submittedAtLocal: Date.now(),
+          startedAtMs: startedAtMsRef.current || Date.now(),
+          expiresAtMs: expiresAtMsRef.current || (Date.now() + 3600000),
+          activeTab,
+          isMock,
+          synced: false,
+        };
+
+        await savePendingSubmission(pendingSub);
+        setIsPendingSync(true);
+        setSubmission({
+          id: operationId,
+          status: 'submitted',
+          content: combinedText,
+          wordCount: totalWc,
+          submittedAt: new Date(),
+          isPendingSync: true,
+        });
+
+        setToastNotification('🎉 Test completed! Your answers are safely saved on this device and will be submitted automatically when the internet connection returns.');
+        setTimeout(() => setToastNotification(''), 9000);
+        setSubmitting(false);
+        return;
+      }
+
+      // Online Direct Submit
       const res = await upsertSubmission(id, dbUser.id, {
         content: combinedText,
         task1Content: t1Text,
         task2Content: t2Text,
-        task1WordCount: t1Text.trim().split(/\s+/).length,
-        task2WordCount: t2Text.trim().split(/\s+/).length,
+        task1WordCount: t1Wc,
+        task2WordCount: t2Wc,
         wordCount: totalWc,
         pasteAttemptCount: pasteAttempts,
         suspiciousBurstFlag: suspiciousBurst,
         status: 'submitted'
       });
+      
       setSubmission({ ...res, status: 'submitted' });
       lastSavedContentRef.current = combinedText;
       setSaveStatus('saved');
       
-      // Clear local draft upon final submission
       await clearLocalDraft(id, dbUser.id);
       
       setToastNotification('🎉 Exam successfully submitted! Your teacher has received your response.');
@@ -510,7 +599,6 @@ export default function TaskWorkspace() {
     );
   }
 
-  // Check Start & Due Dates
   const now = new Date();
   const startDate = task.startDate ? new Date(task.startDate) : null;
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
@@ -518,13 +606,34 @@ export default function TaskWorkspace() {
   const isNotStarted = startDate && now < startDate;
   const isPastDue = dueDate && now > dueDate;
   const isSubmitted = submission?.status === 'submitted' || submission?.status === 'graded';
-  const isReadOnly = isSubmitted || isNotStarted || isPastDue;
+
   const isMock = task.ieltsType === 'mock';
+  const currentWc = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const t1Wc = task1Content.trim() ? task1Content.trim().split(/\s+/).length : (activeTab === 'task1' ? currentWc : 0);
+  const t2Wc = task2Content.trim() ? task2Content.trim().split(/\s+/).length : (activeTab === 'task2' ? currentWc : 0);
+  const totalMockWc = t1Wc + t2Wc;
 
   return (
-    <div className="space-y-6 animate-fade-up w-full max-w-[95%] lg:max-w-[90%] mx-auto pt-8 sm:pt-12 pb-12 px-2 sm:px-4">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 animate-fade-up max-w-7xl mx-auto pb-12">
+      {/* Toast Notification Banner */}
+      {toastNotification && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 rounded-2xl bg-indigo-600/90 border border-indigo-400/50 text-white text-sm font-semibold flex items-center justify-between shadow-2xl backdrop-blur-md"
+        >
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-5 h-5 text-amber-300" />
+            <span>{toastNotification}</span>
+          </div>
+          <button onClick={() => setToastNotification('')} className="text-white/80 hover:text-white">
+            ✕
+          </button>
+        </motion.div>
+      )}
+
+      {/* Top Header Navigation & Status Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-card p-4 rounded-2xl">
         <button 
           onClick={() => {
             performSave();
@@ -554,10 +663,27 @@ export default function TaskWorkspace() {
             <span className="text-indigo-400 font-semibold">{isMock ? totalMockWc : currentWc}</span>
           </div>
 
+          {/* Student UX Save Status Badge (Requirement 16) */}
+          {!isSubmitted && (
+            <div className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center border transition-all ${
+              saveStatus === 'saved'
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                : saveStatus === 'saving'
+                ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 animate-pulse'
+                : saveStatus === 'offline'
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-red-500/10 text-red-400 border-red-500/30'
+            }`}>
+              {saveStatus === 'saved' && <><CheckCircle className="w-3.5 h-3.5 mr-1.5 text-emerald-400" /> ✓ Saved</>}
+              {saveStatus === 'saving' && <><RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-indigo-400" /> Saving...</>}
+              {saveStatus === 'offline' && <><WifiOff className="w-3.5 h-3.5 mr-1.5 text-amber-400" /> Offline — saved locally</>}
+            </div>
+          )}
+
           {isSubmitted ? (
             <div className="px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-sm font-semibold flex items-center">
               <CheckCircle className="w-4 h-4 mr-2" />
-              {submission.status === 'graded' ? 'Graded' : 'Submitted'}
+              {isPendingSync ? 'Test completed — waiting for connection' : submission.status === 'graded' ? 'Graded' : 'Submitted'}
             </div>
           ) : isNotStarted ? (
             <div className="px-4 py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-sm font-semibold flex items-center">
@@ -681,7 +807,7 @@ export default function TaskWorkspace() {
               }
             </div>
 
-            {/* Task 1 Prompt Visual Image Diagram */}
+            {/* Task 1 Consistent Responsive Image Frame (Requirement 1) */}
             {((isMock && activeTab === 'task1' && (task.task1ImageUrl || task.imageUrl)) || (!isMock && task.ieltsType === 'task1' && task.imageUrl)) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -692,7 +818,7 @@ export default function TaskWorkspace() {
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
-                  className="relative w-full min-h-[300px] sm:min-h-[380px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[300px] sm:min-h-[380px] max-h-[480px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-center justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
                     src={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl)} 
@@ -712,129 +838,69 @@ export default function TaskWorkspace() {
               <p>• Copying & pasting text is strictly disabled.</p>
             </div>
           </div>
-
-          {/* Toast Notification Banner */}
-          {toastNotification && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="glass-card p-4 rounded-2xl border-emerald-500/40 bg-emerald-500/10 text-xs sm:text-sm text-emerald-200 flex items-center shadow-xl font-medium"
-            >
-              <CheckCircle className="w-5 h-5 mr-3 text-emerald-400 shrink-0" />
-              <span>{toastNotification}</span>
-            </motion.div>
-          )}
-
-          {/* Feedback Section if Graded */}
-          {submission?.status === 'graded' && submission.feedback && submission.feedback.length > 0 && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-6 rounded-2xl space-y-4 border-emerald-500/50 bg-emerald-950/20 shadow-2xl relative overflow-hidden"
-            >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center space-x-2">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                  </span>
-                  <h3 className="text-lg font-bold flex items-center text-emerald-300">
-                    <Sparkles className="w-5 h-5 mr-2 text-emerald-400" />
-                    Teacher Evaluation Feedback
-                  </h3>
-                </div>
-                <div className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-lg shadow-lg">
-                  Band {submission.feedback[0].bandScore}
-                </div>
-              </div>
-              <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-900/60 p-4 rounded-xl border border-slate-800">
-                {submission.feedback[0].comments}
-              </div>
-            </motion.div>
-          )}
         </div>
 
-        {/* Right Side: Text Editor */}
-        <div className="lg:col-span-7 flex flex-col min-h-[450px] sm:min-h-[550px]">
-          <div className="glass-card rounded-2xl flex-1 flex flex-col p-4 sm:p-6 space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-800 text-xs text-slate-400">
+        {/* Right Side: Writing Workspace Editor */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4 relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span>{isMock ? (activeTab === 'task1' ? 'Task 1 Response Editor' : 'Task 2 Response Editor') : 'Response Workspace'}</span>
+                <span className="text-sm font-semibold">
+                  {isMock 
+                    ? (activeTab === 'task1' ? 'Task 1 Response Area' : 'Task 2 Response Area')
+                    : 'Essay Answer Area'
+                  }
+                </span>
               </div>
 
-              {/* Live Save Status Badge */}
-              <div className="flex items-center space-x-2 font-medium">
-                {isReadOnly ? (
-                  <span className="text-slate-400">Read-only</span>
-                ) : saveStatus === 'saving' ? (
-                  <span className="text-amber-400 flex items-center">
-                    <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Saving...
-                  </span>
-                ) : saveStatus === 'offline' || !isOnline ? (
-                  <span className="text-amber-300 flex items-center" title="Offline mode: Changes saved in IndexedDB & browser memory">
-                    <WifiOff className="w-3 h-3 mr-1 text-amber-400" /> Offline (Saved locally)
-                  </span>
-                ) : saveStatus === 'error' ? (
-                  <button 
-                    onClick={() => performSave()}
-                    className="text-red-400 hover:text-red-300 flex items-center underline"
-                    title="Click to retry saving"
-                  >
-                    <AlertTriangle className="w-3 h-3 mr-1" /> Save failed (Retry)
-                  </button>
-                ) : (
-                  <span className="text-emerald-400 flex items-center">
-                    <CheckCircle className="w-3 h-3 mr-1" /> Saved
-                  </span>
-                )}
+              <div className="text-xs text-slate-400 font-mono">
+                {currentWc} words
               </div>
             </div>
 
-            <textarea 
+            <textarea
+              disabled={isSubmitted || Boolean(isNotStarted) || Boolean(isPastDue)}
               value={content}
-              onChange={handleInputChange}
-              onBlur={() => performSave()}
+              onChange={e => setContent(e.target.value)}
               onPaste={handlePaste}
               onCut={handleCut}
               onCopy={handleCopy}
               onDrop={handleDragDrop}
-              onDragStart={handleDragDrop}
-              onContextMenu={e => e.preventDefault()}
               onKeyDown={handleKeyDown}
-              disabled={isReadOnly}
               placeholder={
-                isNotStarted 
-                  ? `Assignment opens on ${startDate?.toLocaleString()}` 
-                  : isPastDue 
-                  ? 'The submission deadline for this assignment has passed.' 
-                  : isSubmitted 
-                  ? 'Your submission has been finalized.' 
-                  : `Type your ${isMock ? (activeTab === 'task1' ? 'Task 1 Report' : 'Task 2 Essay') : 'IELTS'} response here...`
+                isSubmitted 
+                  ? "Your essay has been submitted and locked." 
+                  : isMock 
+                  ? (activeTab === 'task1' ? "Write your Task 1 report response here..." : "Write your Task 2 essay response here...")
+                  : "Write your complete essay response here..."
               }
-              className="w-full flex-1 min-h-[350px] sm:min-h-[450px] bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none resize-none font-mono text-sm leading-relaxed p-2"
+              className="w-full min-h-[420px] glass-input p-4 rounded-xl text-sm font-sans leading-relaxed resize-y focus:outline-none disabled:opacity-80"
             />
           </div>
         </div>
       </div>
 
-      {/* In-App Confirmation Modal */}
-      <ConfirmModal 
+      {/* Confirmation Submit Modal */}
+      <ConfirmModal
         isOpen={showConfirmSubmit}
-        title="Submit Exam"
-        message="Are you sure you want to submit your final mock exam response to your teacher? Once submitted, you cannot edit your responses further."
-        confirmText="Submit Exam"
-        cancelText="Keep Editing"
-        variant="primary"
+        title="Confirm Exam Submission"
+        message={
+          isMock
+            ? `Are you ready to submit your Full IELTS Mock Exam? (Task 1: ${t1Wc} words, Task 2: ${t2Wc} words, Total: ${totalMockWc} words). Once submitted, your answers will be sent for teacher evaluation.`
+            : `Are you ready to submit your essay? (${currentWc} words). Once submitted, your answers will be sent for teacher evaluation.`
+        }
+        confirmText={submitting ? "Submitting..." : "Yes, Submit Exam"}
+        cancelText="Keep Writing"
         onConfirm={handleConfirmSubmit}
         onCancel={() => setShowConfirmSubmit(false)}
       />
 
-      {/* High Resolution Diagram Lightbox Modal */}
+      {/* Image Lightbox Modal */}
       <ImageLightboxModal
         isOpen={showLightbox}
-        imageUrl={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl) || ''}
-        title={task.title ? `${task.title} — Task 1 Diagram` : 'Task 1 Prompt Visual Graph / Diagram'}
+        imageUrl={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl) || ''}
+        title={`${task?.title || 'Task 1'} Diagram`}
         onClose={() => setShowLightbox(false)}
       />
     </div>

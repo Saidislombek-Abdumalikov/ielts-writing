@@ -41,26 +41,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let mounted = true;
 
-    // Run seeding in background without blocking initial app render
+    // Run seeding/purge in background without blocking initial app render
     seedDefaultAccounts().catch(e => console.warn('Background seed warning:', e));
 
     async function init() {
       try {
         const savedUserId = localStorage.getItem('userId');
         if (savedUserId) {
-          try {
-            const user = await getUserById(savedUserId);
-            if (user && mounted) {
-              setDbUser({ id: user.id, username: user.username, name: user.name, email: user.email, role: user.role });
-              setIsImpersonating(Boolean(localStorage.getItem('originalAdminUserId')));
-            } else {
-              localStorage.removeItem('userId');
-              localStorage.removeItem('originalAdminUserId');
+          // 1. Try restoring from local cached user profile first (instant offline protection)
+          const localCachedRaw = localStorage.getItem(`user_profile_cache_${savedUserId}`);
+          if (localCachedRaw) {
+            try {
+              const cachedUser = JSON.parse(localCachedRaw) as User;
+              if (cachedUser && mounted) {
+                setDbUser(cachedUser);
+                setIsImpersonating(Boolean(localStorage.getItem('originalAdminUserId')));
+              }
+            } catch {
+              // Ignore JSON parse error
             }
-          } catch (e) {
-            console.error('Failed to load saved user session:', e);
-            localStorage.removeItem('userId');
-            localStorage.removeItem('originalAdminUserId');
+          }
+
+          // 2. Fetch fresh user data from server if online
+          if (navigator.onLine) {
+            try {
+              const user = await getUserById(savedUserId);
+              if (user && mounted) {
+                const safeUser: User = { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role };
+                setDbUser(safeUser);
+                localStorage.setItem(`user_profile_cache_${user.id}`, JSON.stringify(safeUser));
+                setIsImpersonating(Boolean(localStorage.getItem('originalAdminUserId')));
+              } else if (!localCachedRaw) {
+                localStorage.removeItem('userId');
+                localStorage.removeItem('originalAdminUserId');
+                setDbUser(null);
+              }
+            } catch (e) {
+              console.warn('Network load note, preserving cached offline user session:', e);
+            }
           }
         }
       } finally {
@@ -70,10 +88,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Safety timeout: ensure loading is NEVER true for more than 2 seconds
+    // Safety timeout: ensure loading is NEVER true for more than 1.5 seconds
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false);
-    }, 2000);
+    }, 1500);
 
     init();
 
@@ -92,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const safeUser: User = { id: user.id, username: user.username, name: user.name, email: user.email, role: user.role };
     localStorage.setItem('userId', user.id);
+    localStorage.setItem(`user_profile_cache_${user.id}`, JSON.stringify(safeUser));
     localStorage.removeItem('originalAdminUserId');
     setDbUser(safeUser);
     setIsImpersonating(false);
@@ -100,12 +119,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = (user: User) => {
     localStorage.setItem('userId', user.id);
+    localStorage.setItem(`user_profile_cache_${user.id}`, JSON.stringify(user));
     localStorage.removeItem('originalAdminUserId');
     setDbUser(user);
     setIsImpersonating(false);
   };
 
   const signOut = () => {
+    const currentUserId = localStorage.getItem('userId');
+    if (currentUserId) {
+      localStorage.removeItem(`user_profile_cache_${currentUserId}`);
+    }
     localStorage.removeItem('userId');
     localStorage.removeItem('originalAdminUserId');
     setDbUser(null);
@@ -123,8 +147,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const targetUser = await getUserById(targetUserId);
     if (!targetUser) throw new Error('User not found');
     
+    const safeUser: User = { id: targetUser.id, username: targetUser.username, name: targetUser.name, email: targetUser.email, role: targetUser.role };
     localStorage.setItem('userId', targetUser.id);
-    setDbUser({ id: targetUser.id, username: targetUser.username, name: targetUser.name, email: targetUser.email, role: targetUser.role });
+    localStorage.setItem(`user_profile_cache_${targetUser.id}`, JSON.stringify(safeUser));
+    setDbUser(safeUser);
     setIsImpersonating(true);
   };
 
@@ -136,7 +162,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsImpersonating(false);
       const admin = await getUserById(adminId);
       if (admin) {
-        setDbUser({ id: admin.id, username: admin.username, name: admin.name, email: admin.email, role: admin.role });
+        const safeUser: User = { id: admin.id, username: admin.username, name: admin.name, email: admin.email, role: admin.role };
+        setDbUser(safeUser);
+        localStorage.setItem(`user_profile_cache_${admin.id}`, JSON.stringify(safeUser));
       }
     }
   };
