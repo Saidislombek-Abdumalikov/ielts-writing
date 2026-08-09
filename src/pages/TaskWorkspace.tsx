@@ -20,7 +20,7 @@ type MockTab = 'task1' | 'task2';
 
 export default function TaskWorkspace() {
   const { id } = useParams<{ id: string }>();
-  const { dbUser } = useAuth();
+  const { dbUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const [task, setTask] = useState<any>(null);
@@ -182,7 +182,6 @@ export default function TaskWorkspace() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial check for pending syncs
     if (navigator.onLine) {
       triggerPendingSync();
     }
@@ -193,26 +192,41 @@ export default function TaskWorkspace() {
     };
   }, [performSave, triggerPendingSync]);
 
-  // Workspace Loading & State Recovery
+  // Ultra-Fast Parallelized Workspace Loading & State Recovery
   useEffect(() => {
-    if (!id || !dbUser) return;
+    if (authLoading) return;
+    if (!id || !dbUser) {
+      if (!authLoading && !dbUser) {
+        navigate('/login', { replace: true });
+      }
+      return;
+    }
+
+    let mounted = true;
+    const safetyTimeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 2500);
+
     async function loadWorkspace() {
       try {
         setLoading(true);
-        let taskData: any = null;
 
-        // Try server task first, or use cached
-        try {
-          taskData = await getTaskById(id!);
-        } catch {
-          // Network fail fallback for task
-        }
+        // Fetch task, pending submissions, student submission with feedback, active exam state, and local draft concurrently in parallel
+        const [taskRes, pendingListRes, subRes, activeExamStateRes, localDraftRecordRes] = await Promise.all([
+          getTaskById(id!).catch(() => null),
+          getPendingSubmissions(dbUser!.id).catch(() => []),
+          getStudentSubmissionWithFeedback(id!, dbUser!.id).catch(() => null),
+          getActiveExamState(id!, dbUser!.id).catch(() => null),
+          getLocalDraft(id!, dbUser!.id).catch(() => null),
+        ]);
 
+        if (!mounted) return;
+
+        let taskData = taskRes;
         if (!taskData) {
-          // Check local pending / draft to see if task info exists
-          const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
-          if (!localDraftRecord) {
-            setError('Task not found or offline cache unavailable');
+          if (!localDraftRecordRes) {
+            setError('Task not found');
+            setLoading(false);
             return;
           }
           taskData = { id: id!, title: 'IELTS Writing Assignment', ieltsType: 'task2', promptText: 'Writing prompt saved locally' };
@@ -220,8 +234,7 @@ export default function TaskWorkspace() {
         setTask(taskData);
 
         // Check Pending Offline Submission Snapshot
-        const pendingList = await getPendingSubmissions(dbUser!.id);
-        const pendingForThisTask = pendingList.find(p => p.taskId === id! && !p.synced);
+        const pendingForThisTask = (pendingListRes || []).find(p => p.taskId === id! && !p.synced);
         if (pendingForThisTask) {
           setIsPendingSync(true);
           isSubmittedRef.current = true;
@@ -236,28 +249,18 @@ export default function TaskWorkspace() {
           });
         }
 
-        let subData: any = null;
-        if (!pendingForThisTask) {
-          try {
-            subData = await getStudentSubmissionWithFeedback(id!, dbUser!.id);
-            if (subData) {
-              setSubmission(subData);
-              if (subData.status === 'submitted' || subData.status === 'graded') {
-                isSubmittedRef.current = true;
-              } else {
-                isSubmittedRef.current = false;
-              }
-            } else {
-              isSubmittedRef.current = false;
-            }
-          } catch {
+        let subData = subRes;
+        if (subData) {
+          setSubmission(subData);
+          if (subData.status === 'submitted' || subData.status === 'graded') {
+            isSubmittedRef.current = true;
+          } else {
             isSubmittedRef.current = false;
           }
         }
 
-        // Restore Active Exam State locally (Requirements 9, 11, 12, 14)
-        const activeExamState = await getActiveExamState(id!, dbUser!.id);
-        const localDraftRecord = await getLocalDraft(id!, dbUser!.id);
+        const activeExamState = activeExamStateRes;
+        const localDraftRecord = localDraftRecordRes;
         
         const localText = activeExamState?.content || localDraftRecord?.content || '';
         const serverText = subData?.content || '';
@@ -329,13 +332,19 @@ export default function TaskWorkspace() {
           }
         }
       } catch (err: any) {
-        setError(err.message || 'Failed to load task workspace');
+        if (mounted) setError(err.message || 'Failed to load task workspace');
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
+        clearTimeout(safetyTimeout);
       }
     }
     loadWorkspace();
-  }, [id, dbUser]);
+
+    return () => {
+      mounted = false;
+      clearTimeout(safetyTimeout);
+    };
+  }, [id, dbUser, authLoading, navigate]);
 
   // Countdown Timer
   useEffect(() => {
@@ -580,10 +589,11 @@ export default function TaskWorkspace() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center space-y-3">
         <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xs text-slate-400 font-medium">Loading IELTS Exam Workspace...</p>
       </div>
     );
   }
@@ -663,7 +673,7 @@ export default function TaskWorkspace() {
             <span className="text-indigo-400 font-semibold">{isMock ? totalMockWc : currentWc}</span>
           </div>
 
-          {/* Student UX Save Status Badge (Requirement 16) */}
+          {/* Student UX Save Status Badge */}
           {!isSubmitted && (
             <div className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center border transition-all ${
               saveStatus === 'saved'
@@ -807,7 +817,7 @@ export default function TaskWorkspace() {
               }
             </div>
 
-            {/* Task 1 Consistent Responsive Image Frame (Requirement 1) */}
+            {/* Task 1 Consistent Responsive Image Frame */}
             {((isMock && activeTab === 'task1' && (task.task1ImageUrl || task.imageUrl)) || (!isMock && task.ieltsType === 'task1' && task.imageUrl)) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
