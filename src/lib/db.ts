@@ -202,10 +202,25 @@ export async function deleteUser(id: string): Promise<void> {
   await deleteDoc(doc(firestore, 'users', id));
 }
 
-// ============== SEED ==============
+// ============== SEED & PURGE ==============
+
+export async function purgeLegacyDefaultAccounts() {
+  try {
+    const snap = await getDocs(usersCol());
+    for (const d of snap.docs) {
+      const u = d.data();
+      if (u.username === 'admin' || u.username === 'teach') {
+        await deleteDoc(d.ref);
+      }
+    }
+  } catch (err) {
+    console.warn('Purge legacy accounts note:', err);
+  }
+}
 
 export async function seedDefaultAccounts() {
-  // Automatic account seeding disabled per prompt requirements.
+  // Automatic account seeding disabled completely.
+  await purgeLegacyDefaultAccounts();
 }
 
 // ============== TASKS ==============
@@ -407,6 +422,40 @@ export async function updateSubmissionByTeacher(subId: string, data: Partial<{ c
   } else if (data.status !== undefined) {
     updateData.status = data.status;
   }
+
+  await updateDoc(doc(firestore, 'submissions', subId), updateData);
+}
+
+export async function grantExtraTimeForStudent(subId: string, extraMinutes: number): Promise<void> {
+  const subSnap = await getDoc(doc(firestore, 'submissions', subId));
+  if (!subSnap.exists()) throw new Error('Submission not found');
+  const existing = subSnap.data();
+
+  const nowMs = Date.now();
+  const expiresMs = nowMs + (extraMinutes * 60 * 1000);
+  const curVer = existing.currentVersion || 1;
+  const existingVersions = existing.versions || [];
+
+  const versionSnapshot = {
+    versionNumber: curVer,
+    content: existing.content || '',
+    task1Content: existing.task1Content || null,
+    task2Content: existing.task2Content || null,
+    wordCount: existing.wordCount || 0,
+    submittedAt: existing.submittedAt ? existing.submittedAt : null,
+    unlockedAt: Timestamp.fromDate(new Date()),
+  };
+
+  const updateData: any = {
+    status: 'draft',
+    submittedAt: null,
+    startedAt: Timestamp.fromDate(new Date(nowMs)),
+    expiresAt: Timestamp.fromDate(new Date(expiresMs)),
+    extraTimeMinutes: extraMinutes,
+    currentVersion: curVer + 1,
+    versions: [...existingVersions, versionSnapshot],
+    updatedAt: Timestamp.fromDate(new Date(nowMs)),
+  };
 
   await updateDoc(doc(firestore, 'submissions', subId), updateData);
 }

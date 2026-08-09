@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
-import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback, updateSubmissionByTeacher } from '../lib/db';
+import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback, updateSubmissionByTeacher, grantExtraTimeForStudent } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
@@ -48,6 +48,11 @@ export default function EvaluationWorkspace() {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
   const [error, setError] = useState('');
+
+  // Extra time modal state
+  const [showExtraTimeModal, setShowExtraTimeModal] = useState(false);
+  const [extraTimeInput, setExtraTimeInput] = useState<number>(15);
+  const [grantingTime, setGrantingTime] = useState(false);
 
   // Teacher direct editing & unlock state & version history state
   const [isEditingContent, setIsEditingContent] = useState(false);
@@ -187,6 +192,22 @@ export default function EvaluationWorkspace() {
       setError(err.message || 'Failed to update essay content');
     } finally {
       setSavingContent(false);
+    }
+  };
+
+  const handleGrantExtraTime = async () => {
+    if (!selectedSub || !extraTimeInput || extraTimeInput <= 0) return;
+    try {
+      setGrantingTime(true);
+      await grantExtraTimeForStudent(selectedSub.submission.id, extraTimeInput);
+      setActionSuccess(`⏱️ Granted ${extraTimeInput} extra minutes to ${selectedSub.student.name}! Student can now log in and resume writing.`);
+      setTimeout(() => setActionSuccess(''), 6000);
+      setShowExtraTimeModal(false);
+      await fetchSubmissionsData(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to grant extra time');
+    } finally {
+      setGrantingTime(false);
     }
   };
 
@@ -506,18 +527,18 @@ export default function EvaluationWorkspace() {
                 </div>
               )}
 
-              {/* Action Buttons for Teacher: Unlock for Student & Edit Content */}
+              {/* Action Buttons for Teacher: Grant Extra Time & Download (.doc) */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <div className="flex items-center space-x-2">
                   {(selectedSub.submission.status === 'submitted' || selectedSub.submission.status === 'graded') && (
                     <button
                       type="button"
-                      onClick={handleUnlockForStudent}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-semibold flex items-center transition-colors shadow-sm"
-                      title="Unlock this essay so the student can edit and resubmit"
+                      onClick={() => setShowExtraTimeModal(true)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold flex items-center transition-colors shadow-sm"
+                      title="Grant student extra minutes to finish and resubmit their exam"
                     >
-                      <Unlock className="w-3.5 h-3.5 mr-1.5" />
-                      Allow Student to Edit (Unlock)
+                      <Clock className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                      ⏱️ Grant Extra Time & Resume
                     </button>
                   )}
 
@@ -527,40 +548,10 @@ export default function EvaluationWorkspace() {
                     className="px-3 py-1.5 rounded-xl bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold flex items-center transition-colors shadow-sm"
                     title="Download complete essay & teacher evaluation report as Microsoft Word (.doc)"
                   >
-                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    <FileText className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
                     Download (.doc)
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!isEditingContent) {
-                        setTeacherContent(selectedSub.submission.content || '');
-                      }
-                      setIsEditingContent(!isEditingContent);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center transition-colors border shadow-sm ${
-                      isEditingContent 
-                        ? 'bg-slate-800 text-slate-300 border-slate-700' 
-                        : 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border-indigo-500/30'
-                    }`}
-                  >
-                    {isEditingContent ? <X className="w-3.5 h-3.5 mr-1.5" /> : <Edit3 className="w-3.5 h-3.5 mr-1.5" />}
-                    {isEditingContent ? 'Cancel Direct Edit' : 'Edit Essay Content'}
-                  </button>
                 </div>
-
-                {isEditingContent && (
-                  <button
-                    type="button"
-                    onClick={handleSaveTeacherContent}
-                    disabled={savingContent}
-                    className="gradient-btn px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center shadow-md disabled:opacity-50"
-                  >
-                    <Save className="w-3.5 h-3.5 mr-1.5" />
-                    {savingContent ? 'Saving...' : 'Save Text Changes'}
-                  </button>
-                )}
               </div>
 
               {/* Anti-cheat alerts */}
@@ -688,9 +679,87 @@ export default function EvaluationWorkspace() {
       <ImageLightboxModal
         isOpen={showLightbox}
         imageUrl={task?.task1ImageUrl || task?.imageUrl || ''}
-        title={task?.title ? `${task.title} — Task 1 Visual Diagram` : 'Task 1 Diagram'}
+        title={`${task?.title || 'Task 1'} Diagram`}
         onClose={() => setShowLightbox(false)}
       />
+
+      {/* Grant Extra Time Modal */}
+      {showExtraTimeModal && selectedSub && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="glass-card max-w-md w-full p-6 rounded-2xl space-y-4 border border-amber-500/40 shadow-2xl">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-bold flex items-center text-amber-300">
+                  <Clock className="w-5 h-5 mr-2 text-amber-400" />
+                  Grant Extra Writing Time
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Allow <strong>{selectedSub.student.name}</strong> to log in and continue writing for a limited time.
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowExtraTimeModal(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold text-slate-300">
+                Select or Enter Extra Time (Minutes):
+              </label>
+              
+              <div className="grid grid-cols-4 gap-2 text-xs font-semibold">
+                {[5, 10, 15, 20, 30].map(mins => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setExtraTimeInput(mins)}
+                    className={`py-2 rounded-xl transition-all border ${
+                      extraTimeInput === mins 
+                        ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-md' 
+                        : 'bg-slate-900/60 text-slate-300 border-slate-700 hover:border-amber-500/40'
+                    }`}
+                  >
+                    +{mins}m
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2">
+                <span className="text-xs text-slate-400 block mb-1">Custom Minutes:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                  value={extraTimeInput}
+                  onChange={e => setExtraTimeInput(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowExtraTimeModal(false)}
+                className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGrantExtraTime}
+                disabled={grantingTime}
+                className="gradient-btn px-5 py-2 rounded-xl text-xs font-bold flex items-center shadow-lg disabled:opacity-50"
+              >
+                {grantingTime ? 'Granting Time...' : `Confirm +${extraTimeInput}m & Unlock`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
