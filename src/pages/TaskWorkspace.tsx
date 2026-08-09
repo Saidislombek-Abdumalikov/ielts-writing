@@ -834,36 +834,56 @@ export default function TaskWorkspace() {
         {/* Left Side Column: Title, Prompt & Visual Image (Clean Top Alignment) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4">
-            {/* Title & Prompt sitting right at the top */}
-            <h1 className="text-xl sm:text-2xl font-bold">{task?.title || 'IELTS Writing Task'}</h1>
-
-            <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
+            {/* Title at the very top */}
+            <h1 className="text-xl sm:text-2xl font-bold">
               {isMock 
-                ? (activeTab === 'task1' ? (task?.task1Prompt || task?.promptText) : (task?.task2Prompt || task?.promptText))
-                : task?.promptText
+                ? (activeTab === 'task1' ? (task?.task1Title || task?.title || 'Task 1 Report') : (task?.task2Title || task?.title || 'Task 2 Essay'))
+                : (task?.title || 'IELTS Writing Task')
               }
-            </div>
+            </h1>
 
-            {/* Task 1 Top-Aligned Substantially Larger Image Frame */}
-            {((isMock && activeTab === 'task1' && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.ieltsType === 'task1' && task?.imageUrl)) && (
+            {/* Task 1 vs Task 2 Left Side Frame (Identical Symmetric Container Sizes) */}
+            {(activeTab === 'task1' || (!isMock && task?.ieltsType === 'task1')) ? (
+              <>
+                <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
+                  {isMock ? (task?.task1Prompt || task?.promptText) : task?.promptText}
+                </div>
+
+                {((isMock && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.imageUrl)) && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-300 flex items-center">
+                        <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-medium">Click diagram to enlarge</span>
+                    </div>
+                    <div 
+                      onClick={() => setShowLightbox(true)}
+                      className="relative w-full h-auto max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                    >
+                      <img 
+                        src={(isMock ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
+                        alt="Task 1 Prompt Visual Graph" 
+                        className="w-full h-auto max-h-[510px] object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
+                      />
+                      <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
+                        <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Lightbox Zoom
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Task 2 Layout: Prompt placed inside frame matching Task 1 picture size exactly */
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
-                    <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
+                    <BookOpen className="w-4 h-4 mr-1 text-indigo-400" /> Task 2 Essay Topic & Instructions
                   </span>
-                  <span className="text-[11px] text-slate-400 font-medium">Click diagram to enlarge</span>
                 </div>
-                <div 
-                  onClick={() => setShowLightbox(true)}
-                  className="relative w-full h-auto max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
-                >
-                  <img 
-                    src={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
-                    alt="Task 1 Prompt Visual Graph" 
-                    className="w-full h-auto max-h-[510px] object-contain rounded-xl select-none transition-transform duration-300 group-hover:scale-[1.01]"
-                  />
-                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-2xl backdrop-blur-[2px]">
-                    <ZoomIn className="w-5 h-5 mr-2 text-indigo-300" /> Click for Lightbox Zoom
+                <div className="relative w-full min-h-[360px] max-h-[520px] bg-slate-950 border border-slate-700/80 rounded-2xl p-5 sm:p-6 overflow-y-auto flex flex-col justify-start space-y-3 shadow-xl">
+                  <div className="prose prose-invert max-w-none text-slate-200 text-sm sm:text-base leading-relaxed whitespace-pre-wrap select-none">
+                    {isMock ? (task?.task2Prompt || task?.promptText) : task?.promptText}
                   </div>
                 </div>
               </div>
