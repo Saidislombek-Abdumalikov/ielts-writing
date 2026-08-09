@@ -40,6 +40,16 @@ export interface DbTask {
   createdAt: Date;
 }
 
+export interface SubmissionVersion {
+  versionNumber: number;
+  content: string;
+  task1Content?: string | null;
+  task2Content?: string | null;
+  wordCount: number;
+  submittedAt?: Date | string | null;
+  unlockedAt?: Date | string | null;
+}
+
 export interface DbSubmission {
   id: string;
   taskId: string;
@@ -53,6 +63,8 @@ export interface DbSubmission {
   wordCount: number;
   pasteAttemptCount: number;
   suspiciousBurstFlag: boolean;
+  currentVersion?: number;
+  versions?: SubmissionVersion[];
   startedAt?: Date | null;
   expiresAt?: Date | null;
   submittedAt: Date | null;
@@ -367,16 +379,41 @@ export async function upsertSubmission(taskId: string, studentId: string, data: 
 }
 
 export async function updateSubmissionByTeacher(subId: string, data: Partial<{ content: string; status: string; wordCount: number }>): Promise<void> {
+  const subDoc = await getDoc(doc(firestore, 'submissions', subId));
+  if (!subDoc.exists()) return;
+  const existing = subDoc.data();
+
   const updateData: any = {
     updatedAt: Timestamp.fromDate(new Date()),
   };
+
   if (data.content !== undefined) {
     updateData.content = data.content;
     updateData.wordCount = data.content.trim() ? data.content.trim().split(/\s+/).length : 0;
   }
-  if (data.status !== undefined) {
+
+  // If unlocking submission (changing status from submitted/graded to draft)
+  if (data.status === 'draft' && (existing.status === 'submitted' || existing.status === 'graded')) {
+    const curVer = existing.currentVersion || 1;
+    const existingVersions = existing.versions || [];
+    
+    const versionSnapshot = {
+      versionNumber: curVer,
+      content: existing.content || '',
+      task1Content: existing.task1Content || null,
+      task2Content: existing.task2Content || null,
+      wordCount: existing.wordCount || 0,
+      submittedAt: existing.submittedAt ? existing.submittedAt : null,
+      unlockedAt: Timestamp.fromDate(new Date()),
+    };
+
+    updateData.status = 'draft';
+    updateData.currentVersion = curVer + 1;
+    updateData.versions = [...existingVersions, versionSnapshot];
+  } else if (data.status !== undefined) {
     updateData.status = data.status;
   }
+
   await updateDoc(doc(firestore, 'submissions', subId), updateData);
 }
 

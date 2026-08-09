@@ -5,7 +5,7 @@ import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedba
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
-  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X
+  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X, History
 } from 'lucide-react';
 
 function getTimeSpent(sub: any) {
@@ -48,11 +48,12 @@ export default function EvaluationWorkspace() {
   const [feedbackSuccess, setFeedbackSuccess] = useState('');
   const [error, setError] = useState('');
 
-  // Teacher direct editing & unlock state
+  // Teacher direct editing & unlock state & version history state
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [teacherContent, setTeacherContent] = useState('');
   const [savingContent, setSavingContent] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
+  const [selectedVersionIndex, setSelectedVersionIndex] = useState<number | 'current'>('current');
 
   const fetchSubmissionsData = async (isInitial = false) => {
     if (!taskId) return;
@@ -132,6 +133,7 @@ export default function EvaluationWorkspace() {
     setActionSuccess('');
     setError('');
     setIsEditingContent(false);
+    setSelectedVersionIndex('current');
     setTeacherContent(subItem.submission.content || '');
     loadExistingFeedback(subItem.submission.id);
   };
@@ -471,8 +473,19 @@ export default function EvaluationWorkspace() {
                   />
                 </div>
               ) : (
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-200 text-sm leading-relaxed min-h-[250px] whitespace-pre-wrap font-mono">
-                  {selectedSub.submission.content || <em className="text-slate-500">No content submitted yet.</em>}
+                <div className="space-y-2">
+                  {selectedVersionIndex !== 'current' && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center">
+                      <History className="w-4 h-4 mr-2 text-amber-400 shrink-0" />
+                      Viewing Historical Version {selectedSub.submission.versions[selectedVersionIndex]?.versionNumber || (selectedVersionIndex + 1)} (Snapshot taken before re-opening).
+                    </div>
+                  )}
+                  <div className="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/80 border border-slate-800 whitespace-pre-wrap font-mono min-h-[220px]">
+                    {selectedVersionIndex === 'current' 
+                      ? (selectedSub.submission.content || <span className="text-slate-500 italic">No essay response written.</span>)
+                      : (selectedSub.submission.versions[selectedVersionIndex]?.content || <span className="text-slate-500 italic">No essay response written in this version.</span>)
+                    }
+                  </div>
                 </div>
               )}
             </div>
