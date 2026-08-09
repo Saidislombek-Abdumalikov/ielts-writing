@@ -29,9 +29,9 @@ export default function ImageLightboxModal({ isOpen, imageUrl, title, onClose }:
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
-          className="relative max-w-6xl w-full max-h-[95vh] glass-card p-4 sm:p-6 rounded-2xl flex flex-col items-center overflow-hidden border-slate-700 bg-slate-950/95 shadow-2xl"
+          className="relative max-w-6xl w-full max-h-[90vh] glass-card p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-between overflow-hidden border-slate-700 bg-slate-950/95 shadow-2xl"
         >
-          <div className="flex items-center justify-between w-full pb-3 border-b border-slate-800 shrink-0">
+          <div className="flex items-center justify-between w-full pb-2.5 border-b border-slate-800 shrink-0">
             <h3 className="text-base sm:text-lg font-bold text-slate-200 truncate flex items-center">
               <ZoomIn className="w-5 h-5 mr-2 text-indigo-400" />
               {title || 'Task 1 Prompt Visual Graph / Diagram'}
@@ -56,11 +56,11 @@ export default function ImageLightboxModal({ isOpen, imageUrl, title, onClose }:
             </div>
           </div>
 
-          <div className="flex-1 w-full flex flex-col items-center justify-center p-2 sm:p-4 overflow-y-auto min-h-0">
+          <div className="flex-1 w-full flex items-center justify-center p-2 sm:p-3 overflow-hidden min-h-0">
             <img
               src={imageUrl}
               alt="Task 1 Visual Prompt High Res"
-              className="max-w-full h-auto max-h-[82vh] object-contain rounded-xl shadow-2xl border border-slate-800 select-none my-auto"
+              className="max-w-full max-h-[78vh] w-auto h-auto object-contain rounded-xl shadow-2xl border border-slate-800 shrink-0 select-none"
             />
           </div>
         </motion.div>
