@@ -35,7 +35,6 @@ export default function TaskWorkspace() {
   const [submission, setSubmission] = useState<any>(null);
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState<boolean>(() => {
-    // If local task cache exists, start with loading = false for 0ms instant render!
     if (id && localStorage.getItem(`task_cache_${id}`)) return false;
     return true;
   });
@@ -218,7 +217,6 @@ export default function TaskWorkspace() {
     let mounted = true;
 
     async function loadWorkspaceInstant() {
-      // 1. Instant Local State Hydration (0ms Latency)
       const [activeExamStateRes, localDraftRecordRes, pendingListRes] = await Promise.all([
         getActiveExamState(id!, dbUser!.id).catch(() => null),
         getLocalDraft(id!, dbUser!.id).catch(() => null),
@@ -267,12 +265,10 @@ export default function TaskWorkspace() {
         }
       }
 
-      // If local task or draft exists, show screen IMMEDIATELY with 0ms delay!
       if (localTask || localText) {
         setLoading(false);
       }
 
-      // 2. Background Network Sync (Silent, non-blocking)
       try {
         const [taskData, subData] = await Promise.all([
           getTaskById(id!).catch(() => localTask),
@@ -326,7 +322,6 @@ export default function TaskWorkspace() {
         setPasteAttempts(activeExamStateRes?.pasteAttemptCount || subData?.pasteAttemptCount || 0);
         setSuspiciousBurst(activeExamStateRes?.suspiciousBurstFlag || subData?.suspiciousBurstFlag || false);
 
-        // Server-Controlled Timer Calculations & Recovery
         if (effectiveTask?.timerMinutes && !isSubmittedRef.current) {
           const nowMs = Date.now();
           const totalSecs = effectiveTask.timerMinutes * 60;
@@ -527,7 +522,7 @@ export default function TaskWorkspace() {
     }
   };
 
-  // Submit Handler with Offline Pending Submission Engine (Requirements 4, 5, 6, 7, 8)
+  // Submit Handler
   const handleConfirmSubmit = async () => {
     if (!id || !dbUser) return;
     try {
@@ -545,7 +540,6 @@ export default function TaskWorkspace() {
 
       const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
 
-      // Check if Offline when submitting
       if (!navigator.onLine) {
         const operationId = `sub_pending_${id}_${dbUser.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const pendingSub: PendingSubmission = {
@@ -586,7 +580,6 @@ export default function TaskWorkspace() {
         return;
       }
 
-      // Online Direct Submit
       const res = await upsertSubmission(id, dbUser.id, {
         content: combinedText,
         task1Content: t1Text,
@@ -700,30 +693,30 @@ export default function TaskWorkspace() {
         </button>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Mock Exam Tab Navigation Header inside Top Header Bar */}
+          {/* Clean Mock Exam Tabs in Top Bar (Strictly 'Task 1' and 'Task 2') */}
           {isMock && (
             <div className="flex bg-slate-900/60 dark:bg-slate-900 p-1 rounded-xl border border-slate-700/60 text-xs font-semibold">
               <button 
                 onClick={() => handleTabSwitch('task1')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
                   activeTab === 'task1' 
                     ? 'bg-indigo-600 text-white shadow-md' 
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Task 1 ({t1Wc}w)</span>
+                <span>Task 1</span>
               </button>
               <button 
                 onClick={() => handleTabSwitch('task2')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 ${
                   activeTab === 'task2' 
                     ? 'bg-indigo-600 text-white shadow-md' 
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>Task 2 ({t2Wc}w)</span>
+                <span>Task 2</span>
               </button>
             </div>
           )}
@@ -825,25 +818,12 @@ export default function TaskWorkspace() {
         </div>
       )}
 
-      {/* Main Workspace Layout */}
+      {/* Main Workspace Layout (Symmetric Two-Column Split Screen) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Side: Prompt & Visual Image */}
-        <div className="lg:col-span-5 space-y-6">
+        {/* Left Side Column: Title, Prompt & Visual Image (Clean Top Alignment) */}
+        <div className="lg:col-span-5 space-y-4">
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                {isMock 
-                  ? (activeTab === 'task1' ? 'Task 1 (Report - 150w min)' : 'Task 2 (Essay - 250w min)')
-                  : (task?.ieltsType === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)')
-                }
-              </span>
-              {task?.assignmentMode === 'partly' && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Focus: {task.focusLabel || 'Partly'}
-                </span>
-              )}
-            </div>
-
+            {/* Title & Prompt sitting right at the top */}
             <h1 className="text-xl sm:text-2xl font-bold">{task?.title || 'IELTS Writing Task'}</h1>
 
             <div className="prose prose-invert max-w-none text-slate-300 text-sm leading-relaxed p-4 rounded-xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap select-none">
@@ -853,9 +833,9 @@ export default function TaskWorkspace() {
               }
             </div>
 
-            {/* Task 1 Top-Aligned Expanded Responsive Image Frame with Fullscreen F11 Button */}
+            {/* Task 1 Top-Aligned Substantially Larger Image Frame */}
             {((isMock && activeTab === 'task1' && (task?.task1ImageUrl || task?.imageUrl)) || (!isMock && task?.ieltsType === 'task1' && task?.imageUrl)) && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-300 flex items-center">
                     <ZoomIn className="w-4 h-4 mr-1 text-indigo-400" /> Task 1 Diagram / Map / Chart
@@ -876,7 +856,7 @@ export default function TaskWorkspace() {
                 </div>
                 <div 
                   onClick={() => setShowLightbox(true)}
-                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[380px] sm:min-h-[480px] max-h-[620px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
+                  className="relative w-full aspect-[4/3] sm:aspect-[16/10] min-h-[440px] sm:min-h-[540px] max-h-[700px] bg-slate-950 border border-slate-700/80 rounded-2xl group cursor-pointer p-1 flex items-start justify-center hover:border-indigo-500/70 transition-all shadow-xl overflow-hidden"
                 >
                   <img 
                     src={(isMock && activeTab === 'task1' ? (task?.task1ImageUrl || task?.imageUrl) : task?.imageUrl)} 
@@ -898,7 +878,7 @@ export default function TaskWorkspace() {
           </div>
         </div>
 
-        {/* Right Side: Writing Workspace Editor */}
+        {/* Right Side Column: Writing Workspace Editor */}
         <div className="lg:col-span-7 space-y-4">
           <div className="glass-card p-4 sm:p-6 rounded-2xl space-y-4 relative">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -933,7 +913,7 @@ export default function TaskWorkspace() {
                   ? (activeTab === 'task1' ? "Write your Task 1 report response here..." : "Write your Task 2 essay response here...")
                   : "Write your complete essay response here..."
               }
-              className="w-full min-h-[420px] glass-input p-4 rounded-xl text-sm font-sans leading-relaxed resize-y focus:outline-none disabled:opacity-80"
+              className="w-full min-h-[460px] glass-input p-4 rounded-xl text-sm font-sans leading-relaxed resize-y focus:outline-none disabled:opacity-80"
             />
           </div>
         </div>
