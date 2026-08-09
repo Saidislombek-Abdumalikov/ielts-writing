@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { getAllTasks, createTask, updateTask, deleteTask } from '../lib/db';
+import { uploadTask1Image } from '../lib/storage';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Plus, Users, Search, Edit2, Trash2, Calendar } from 'lucide-react';
+import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function TeacherDashboard() {
@@ -13,6 +14,9 @@ export default function TeacherDashboard() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<string | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState('');
   
   const getTwoDaysFromNowString = () => {
     const d = new Date();
@@ -30,6 +34,7 @@ export default function TeacherDashboard() {
     task1Prompt: '',
     task1ImageUrl: '',
     task2Prompt: '',
+    imageUrl: '',
     timerMinutes: 40,
     startDate: new Date().toISOString().slice(0, 16),
     dueDate: getTwoDaysFromNowString()
@@ -37,6 +42,26 @@ export default function TeacherDashboard() {
   
   const [newTask, setNewTask] = useState(defaultTask);
   const navigate = useNavigate();
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      setImageError('');
+      const uploadedUrl = await uploadTask1Image(file);
+      setNewTask(prev => ({
+        ...prev,
+        imageUrl: uploadedUrl,
+        task1ImageUrl: uploadedUrl
+      }));
+    } catch (err: any) {
+      setImageError(err.message || 'Failed to upload image.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const loadTasks = async () => {
     const t = await getAllTasks();
@@ -68,8 +93,9 @@ export default function TeacherDashboard() {
       focusLabel: task.focusLabel || '',
       promptText: task.promptText || '',
       task1Prompt: task.task1Prompt || '',
-      task1ImageUrl: task.task1ImageUrl || '',
+      task1ImageUrl: task.task1ImageUrl || task.imageUrl || '',
       task2Prompt: task.task2Prompt || '',
+      imageUrl: task.imageUrl || '',
       timerMinutes: task.timerMinutes || 40,
       startDate: task.startDate ? new Date(task.startDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       dueDate: new Date(task.dueDate).toISOString().slice(0, 16)
@@ -204,17 +230,105 @@ export default function TeacherDashboard() {
               <div className="flex flex-col space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-indigo-300 mb-1">Task 1 Question / Prompt (Report)</label>
-                  <textarea required className="w-full min-h-[100px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task1Prompt || newTask.promptText} onChange={e => setNewTask({...newTask, task1Prompt: e.target.value, promptText: e.target.value})} placeholder="Enter Task 1 prompt..." />
+                  <textarea required className="w-full min-h-[90px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task1Prompt || newTask.promptText} onChange={e => setNewTask({...newTask, task1Prompt: e.target.value, promptText: e.target.value})} placeholder="Enter Task 1 prompt..." />
                 </div>
+                
+                {/* Image Upload for Task 1 */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300 flex items-center">
+                    <ImageIcon className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+                    Task 1 Visual Diagram / Graph Image (Optional)
+                  </label>
+                  {newTask.imageUrl || newTask.task1ImageUrl ? (
+                    <div className="relative group w-fit rounded-xl overflow-hidden border border-slate-700 bg-slate-900 p-2 flex items-center space-x-3">
+                      <img src={newTask.imageUrl || newTask.task1ImageUrl} alt="Task 1 preview" className="h-16 w-24 object-cover rounded-lg" />
+                      <button
+                        type="button"
+                        onClick={() => setNewTask({...newTask, imageUrl: '', task1ImageUrl: ''})}
+                        className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-xs flex items-center"
+                      >
+                        <X className="w-4 h-4 mr-1" /> Remove Image
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl p-4 text-center transition-all bg-slate-900/40">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        disabled={uploadingImage}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <div className="flex flex-col items-center space-y-1">
+                        {uploadingImage ? (
+                          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                        ) : (
+                          <Upload className="w-6 h-6 text-slate-400" />
+                        )}
+                        <span className="text-xs text-slate-300 font-medium">
+                          {uploadingImage ? 'Uploading Image to Cloud Storage...' : 'Click or Drag Task 1 Graph / Map / Chart Image here'}
+                        </span>
+                        <span className="text-[10px] text-slate-500">Supports PNG, JPG, WEBP, SVG (Max 5MB)</span>
+                      </div>
+                    </div>
+                  )}
+                  {imageError && <p className="text-xs text-red-400 font-medium">{imageError}</p>}
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-indigo-300 mb-1">Task 2 Question / Prompt (Essay)</label>
-                  <textarea required className="w-full min-h-[100px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task2Prompt} onChange={e => setNewTask({...newTask, task2Prompt: e.target.value})} placeholder="Enter Task 2 essay prompt..." />
+                  <textarea required className="w-full min-h-[90px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.task2Prompt} onChange={e => setNewTask({...newTask, task2Prompt: e.target.value})} placeholder="Enter Task 2 essay prompt..." />
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col">
-                <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
-                <textarea required className="w-full h-full min-h-[160px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact prompt..." />
+              <div className="flex flex-col space-y-4">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Prompt / Question</label>
+                  <textarea required className="w-full min-h-[140px] glass-input px-4 py-3 rounded-lg resize-none text-sm" value={newTask.promptText} onChange={e => setNewTask({...newTask, promptText: e.target.value})} placeholder="Enter the exact prompt..." />
+                </div>
+
+                {newTask.ieltsType === 'task1' && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center">
+                      <ImageIcon className="w-3.5 h-3.5 mr-1 text-indigo-400" />
+                      Task 1 Visual Diagram / Graph Image (Optional)
+                    </label>
+                    {newTask.imageUrl ? (
+                      <div className="relative group w-fit rounded-xl overflow-hidden border border-slate-700 bg-slate-900 p-2 flex items-center space-x-3">
+                        <img src={newTask.imageUrl} alt="Task 1 preview" className="h-16 w-24 object-cover rounded-lg" />
+                        <button
+                          type="button"
+                          onClick={() => setNewTask({...newTask, imageUrl: ''})}
+                          className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors text-xs flex items-center"
+                        >
+                          <X className="w-4 h-4 mr-1" /> Remove Image
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative border-2 border-dashed border-slate-700 hover:border-indigo-500/50 rounded-xl p-4 text-center transition-all bg-slate-900/40">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileChange}
+                          disabled={uploadingImage}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                        <div className="flex flex-col items-center space-y-1">
+                          {uploadingImage ? (
+                            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                          ) : (
+                            <Upload className="w-6 h-6 text-slate-400" />
+                          )}
+                          <span className="text-xs text-slate-300 font-medium">
+                            {uploadingImage ? 'Uploading Image to Cloud Storage...' : 'Click or Drag Task 1 Graph / Map / Chart Image here'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">Supports PNG, JPG, WEBP, SVG (Max 5MB)</span>
+                        </div>
+                      </div>
+                    )}
+                    {imageError && <p className="text-xs text-red-400 font-medium">{imageError}</p>}
+                  </div>
+                )}
               </div>
             )}
           </div>

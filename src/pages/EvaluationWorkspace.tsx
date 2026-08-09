@@ -5,8 +5,9 @@ import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedba
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
-  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X, History
+  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X, History, ZoomIn
 } from 'lucide-react';
+import ImageLightboxModal from '../components/ImageLightboxModal';
 
 function getTimeSpent(sub: any) {
   if (!sub) return 'N/A';
@@ -54,6 +55,7 @@ export default function EvaluationWorkspace() {
   const [savingContent, setSavingContent] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
   const [selectedVersionIndex, setSelectedVersionIndex] = useState<number | 'current'>('current');
+  const [showLightbox, setShowLightbox] = useState(false);
 
   const fetchSubmissionsData = async (isInitial = false) => {
     if (!taskId) return;
@@ -404,6 +406,26 @@ export default function EvaluationWorkspace() {
                 </div>
               </div>
 
+              {/* Task 1 Diagram Preview for Teacher */}
+              {(task?.imageUrl || task?.task1ImageUrl) && (
+                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <img src={task.task1ImageUrl || task.imageUrl} alt="Task 1 Diagram" className="h-12 w-16 object-cover rounded-lg border border-slate-700" />
+                    <div>
+                      <span className="text-xs font-semibold text-indigo-300 block">Task 1 Visual Diagram</span>
+                      <span className="text-[10px] text-slate-400">Click preview to view diagram in full resolution</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLightbox(true)}
+                    className="px-3 py-1.5 rounded-xl glass-card text-xs text-indigo-300 hover:text-white font-semibold flex items-center border border-indigo-500/30"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5 mr-1 text-indigo-400" /> View Diagram
+                  </button>
+                </div>
+              )}
+
               {/* Action Buttons for Teacher: Unlock for Student & Edit Content */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <div className="flex items-center space-x-2">
@@ -571,6 +593,14 @@ export default function EvaluationWorkspace() {
           </div>
         )}
       </div>
+
+      {/* High Resolution Task 1 Diagram Lightbox Modal */}
+      <ImageLightboxModal
+        isOpen={showLightbox}
+        imageUrl={task?.task1ImageUrl || task?.imageUrl || ''}
+        title={task?.title ? `${task.title} — Task 1 Visual Diagram` : 'Task 1 Diagram'}
+        onClose={() => setShowLightbox(false)}
+      />
     </div>
   );
 }

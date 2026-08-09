@@ -6,9 +6,10 @@ import { saveLocalDraft, getLocalDraft, clearLocalDraft } from '../lib/draftMana
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Clock, Send, AlertTriangle, 
-  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3
+  CheckCircle, FileText, Sparkles, ShieldAlert, Lock, Wifi, WifiOff, RefreshCw, BookOpen, Edit3, ZoomIn
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
+import ImageLightboxModal from '../components/ImageLightboxModal';
 
 type SaveStatus = 'saved' | 'saving' | 'offline' | 'error';
 type MockTab = 'task1' | 'task2';
@@ -26,6 +27,7 @@ export default function TaskWorkspace() {
   const [error, setError] = useState('');
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [toastNotification, setToastNotification] = useState<string>('');
+  const [showLightbox, setShowLightbox] = useState(false);
   
   // Phase 3: Mock Exam Tabs & Dual Content State
   const [activeTab, setActiveTab] = useState<MockTab>('task1');
@@ -646,6 +648,28 @@ export default function TaskWorkspace() {
               }
             </div>
 
+            {/* Task 1 Prompt Visual Image Diagram */}
+            {((isMock && activeTab === 'task1' && (task.task1ImageUrl || task.imageUrl)) || (!isMock && task.ieltsType === 'task1' && task.imageUrl)) && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-indigo-300 flex items-center">
+                  <ZoomIn className="w-3.5 h-3.5 mr-1" /> Prompt Visual Diagram (Click to enlarge)
+                </span>
+                <div 
+                  onClick={() => setShowLightbox(true)}
+                  className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-900/80 group cursor-pointer p-2 hover:border-indigo-500/50 transition-all"
+                >
+                  <img 
+                    src={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl)} 
+                    alt="Task 1 Prompt Visual Graph" 
+                    className="w-full max-h-64 object-contain rounded-lg"
+                  />
+                  <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs rounded-xl backdrop-blur-[2px]">
+                    <ZoomIn className="w-4 h-4 mr-1.5 text-indigo-400" /> Click for High-Res Full Screen View
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="pt-2 text-xs text-slate-400 space-y-1">
               <p>• Recommended length: {activeTab === 'task1' ? '150 words' : '250 words'}</p>
               <p>• Shared Exam Timer: Switching tabs does not reset time.</p>
@@ -768,6 +792,14 @@ export default function TaskWorkspace() {
         variant="primary"
         onConfirm={handleConfirmSubmit}
         onCancel={() => setShowConfirmSubmit(false)}
+      />
+
+      {/* High Resolution Diagram Lightbox Modal */}
+      <ImageLightboxModal
+        isOpen={showLightbox}
+        imageUrl={(isMock && activeTab === 'task1' ? (task.task1ImageUrl || task.imageUrl) : task.imageUrl) || ''}
+        title={task.title ? `${task.title} — Task 1 Diagram` : 'Task 1 Prompt Visual Graph / Diagram'}
+        onClose={() => setShowLightbox(false)}
       />
     </div>
   );
