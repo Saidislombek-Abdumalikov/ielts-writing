@@ -429,6 +429,7 @@ export async function getTaskById(id: string): Promise<DbTask | null> {
 }
 
 export async function createTask(teacherId: string, data: any): Promise<DbTask> {
+  allTasksCache = null;
   const now = new Date();
   const docRef = await addDoc(tasksCol(), {
     teacherId,
@@ -451,6 +452,7 @@ export async function createTask(teacherId: string, data: any): Promise<DbTask> 
 }
 
 export async function updateTask(id: string, data: any): Promise<DbTask> {
+  allTasksCache = null;
   const updatePayload: any = {};
   if (data.title !== undefined) updatePayload.title = data.title;
   if (data.ieltsType !== undefined) updatePayload.ieltsType = data.ieltsType;
@@ -471,6 +473,7 @@ export async function updateTask(id: string, data: any): Promise<DbTask> {
 }
 
 export async function deleteTask(id: string): Promise<void> {
+  allTasksCache = null;
   // Delete associated feedback and submissions
   const subsSnap = await getDocs(query(collection(firestore, 'submissions'), where('taskId', '==', id)));
   for (const s of subsSnap.docs) {
