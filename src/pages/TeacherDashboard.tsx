@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
-import { getAllTasks, createTask, updateTask, deleteTask, getTeacherStudents, createUser, updateUser, deleteUser } from '../lib/db';
+import { getTasksForTeacher, createTask, updateTask, deleteTask, getTeacherStudents, createUser, updateUser, deleteUser } from '../lib/db';
 import { uploadTask1Image } from '../lib/storage';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
@@ -82,7 +82,7 @@ export default function TeacherDashboard() {
   const loadData = async () => {
     if (!dbUser) return;
     const [t, st] = await Promise.all([
-      getAllTasks(),
+      getTasksForTeacher(dbUser.id),
       getTeacherStudents(dbUser.id)
     ]);
     setTasks(t);

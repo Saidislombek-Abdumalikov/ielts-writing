@@ -847,12 +847,41 @@ export async function submitFeedback(submissionId: string, teacherId: string, ba
 
 // ============== TASKS WITH STUDENT SUBMISSIONS ==============
 
+// Get tasks visible to a specific teacher: Admin tests + Teacher's own created tests
+export async function getTasksForTeacher(teacherId: string): Promise<DbTask[]> {
+  const [allUsers, allTasks] = await Promise.all([
+    getAllUsers(),
+    getAllTasks()
+  ]);
+
+  const adminIds = new Set(allUsers.filter(u => u.role === 'admin').map(u => u.id));
+
+  return allTasks.filter(task => {
+    if (!task.teacherId) return true; // Admin/System default test
+    if (adminIds.has(task.teacherId)) return true; // Admin test -> visible to all teachers
+    if (task.teacherId === teacherId) return true; // Teacher's custom test
+    return false; // Hidden from other teachers
+  });
+}
+
+// Get tasks visible to a specific student: Admin tests + Student's assigned teacher's tests
 export async function getTasksForStudent(studentId: string): Promise<any[]> {
-  // Fetch tasks and student submissions concurrently in parallel
-  const [tasks, subsSnap] = await Promise.all([
+  const [student, allUsers, tasks, subsSnap] = await Promise.all([
+    getUserById(studentId),
+    getAllUsers(),
     getAllTasks(),
     getDocs(query(subsCol(), where('studentId', '==', studentId)))
   ]);
+
+  const adminIds = new Set(allUsers.filter(u => u.role === 'admin').map(u => u.id));
+  const studentTeacherId = student?.teacherId || null;
+
+  const visibleTasks = tasks.filter(task => {
+    if (!task.teacherId) return true; // Admin/System default test -> visible to everyone
+    if (adminIds.has(task.teacherId)) return true; // Admin test -> visible to everyone
+    if (studentTeacherId && task.teacherId === studentTeacherId) return true; // Created by student's assigned teacher
+    return false; // Hidden from students not linked to this teacher
+  });
 
   const studentSubs = subsSnap.docs.map(d => ({
     id: d.id, ...d.data(),
@@ -880,7 +909,7 @@ export async function getTasksForStudent(studentId: string): Promise<any[]> {
     if (fb) fbMap.set(fb.submissionId, fb);
   });
 
-  return tasks.map(task => {
+  return visibleTasks.map(task => {
     const sub = subMap.get(task.id) || null;
     const feedback = sub ? (fbMap.get(sub.id) || null) : null;
     return {

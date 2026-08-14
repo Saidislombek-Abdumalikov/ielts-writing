@@ -787,32 +787,34 @@ export default function TaskWorkspace() {
               <Lock className="w-4 h-4 mr-2" />
               Opens {new Date(task?.startDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
             </div>
-          ) : isPastDue ? (
-            <div className="px-4 py-2 rounded-xl bg-red-500/20 text-red-300 border border-red-500/30 text-sm font-semibold flex items-center">
-              <Lock className="w-4 h-4 mr-2" />
-              Closed
-            </div>
           ) : (
-            <button 
-              onClick={() => {
-                if (isMock) {
-                  if (!task1Content.trim() && !task2Content.trim() && !content.trim()) {
-                    setError('Please write an essay response before submitting.');
+            <div className="flex items-center space-x-3">
+              {isPastDue && (
+                <span className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center">
+                  ⚠️ Deadline Passed (Late Submission)
+                </span>
+              )}
+              <button 
+                onClick={() => {
+                  if (isMock) {
+                    if (!task1Content.trim() && !task2Content.trim() && !content.trim()) {
+                      setError('Please write an essay response before submitting.');
+                      return;
+                    }
+                  } else if (!content.trim()) {
+                    setError('Please write your essay response before submitting.');
                     return;
                   }
-                } else if (!content.trim()) {
-                  setError('Please write your essay response before submitting.');
-                  return;
-                }
-                setError('');
-                setShowConfirmSubmit(true);
-              }}
-              disabled={submitting}
-              className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium flex items-center shadow-lg disabled:opacity-50"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              {submitting ? 'Submitting...' : 'Submit Exam'}
-            </button>
+                  setError('');
+                  setShowConfirmSubmit(true);
+                }}
+                disabled={submitting}
+                className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium flex items-center shadow-lg disabled:opacity-50"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {submitting ? 'Submitting...' : 'Submit Exam'}
+              </button>
+            </div>
           )}
         </div>
       </div>
