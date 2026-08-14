@@ -157,11 +157,17 @@ export async function getUserById(id: string): Promise<DbUser | null> {
 }
 
 export async function createUser(data: { name: string; username: string; password: string; role: string; groupId?: string | null; teacherId?: string | null }): Promise<DbUser> {
+  const cleanUsername = data.username.trim().toLowerCase();
+  const existing = await getUserByUsername(cleanUsername);
+  if (existing) {
+    throw new Error(`Username "${cleanUsername}" is already taken. Please choose a different username.`);
+  }
+
   const passwordHash = await hashPassword(data.password);
   const now = new Date();
   const docRef = await addDoc(usersCol(), {
     name: data.name,
-    username: data.username.trim().toLowerCase(),
+    username: cleanUsername,
     email: null,
     passwordHash,
     role: data.role || 'student',
@@ -172,7 +178,7 @@ export async function createUser(data: { name: string; username: string; passwor
   return {
     id: docRef.id,
     name: data.name,
-    username: data.username.trim().toLowerCase(),
+    username: cleanUsername,
     email: null,
     passwordHash,
     role: data.role as any,

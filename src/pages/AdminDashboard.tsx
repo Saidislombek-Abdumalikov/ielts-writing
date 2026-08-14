@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [deleteUserData, setDeleteUserData] = useState<{ id: string; username: string } | null>(null);
 
@@ -46,10 +47,19 @@ export default function AdminDashboard() {
     loadUsers();
   }, []);
 
+  const handleOpenCreateModal = () => {
+    setEditingUserId(null);
+    setFormData({ name: '', username: '', password: '', role: 'student', teacherId: '' });
+    setError('');
+    setShowCreate(!showCreate);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError('');
     setSuccess('');
+    setSubmitting(true);
 
     try {
       const payload: any = { ...formData };
@@ -64,6 +74,7 @@ export default function AdminDashboard() {
       } else {
         if (!formData.password) {
           setError('Password is required for new accounts');
+          setSubmitting(false);
           return;
         }
         await createUser(payload);
@@ -72,10 +83,23 @@ export default function AdminDashboard() {
       setShowCreate(false);
       setEditingUserId(null);
       setFormData({ name: '', username: '', password: '', role: 'student', teacherId: '' });
-      loadUsers();
+      await loadUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Action failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleQuickAssignTeacher = async (studentId: string, teacherId: string) => {
+    try {
+      await updateUser(studentId, { teacherId: teacherId || null });
+      setSuccess('Teacher linkage updated!');
+      await loadUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to assign teacher');
     }
   };
 
@@ -95,20 +119,14 @@ export default function AdminDashboard() {
     if (!deleteUserData) return;
     try {
       await deleteUser(deleteUserData.id);
-      setSuccess(`User ${deleteUserData.username} deleted`);
+      setSuccess(`User @${deleteUserData.username} deleted`);
       setDeleteUserData(null);
-      loadUsers();
+      await loadUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to delete user');
       setDeleteUserData(null);
     }
-  };
-
-  const getTeacherName = (tId?: string) => {
-    if (!tId) return '—';
-    const found = teachersList.find(t => t.id === tId);
-    return found ? found.name : 'Unknown';
   };
 
   return (
@@ -120,18 +138,12 @@ export default function AdminDashboard() {
             User Account & Teacher Linkage Management
           </h2>
           <p className="text-sm text-slate-400">
-            Manage teacher and student user accounts, assign students to specific teachers, and control access.
+            Manage user accounts, assign students to specific teachers directly from the list, and control access.
           </p>
         </div>
 
         <button 
-          onClick={() => {
-            setShowCreate(!showCreate);
-            if (editingUserId) {
-              setEditingUserId(null);
-              setFormData({ name: '', username: '', password: '', role: 'student', teacherId: '' });
-            }
-          }}
+          onClick={handleOpenCreateModal}
           className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center w-full sm:w-fit shadow-lg"
         >
           <UserPlus className="w-4 h-4 mr-2" />
@@ -140,7 +152,7 @@ export default function AdminDashboard() {
       </div>
 
       {success && (
-        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm rounded-xl">
+        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm rounded-xl font-medium">
           {success}
         </div>
       )}
@@ -157,6 +169,7 @@ export default function AdminDashboard() {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           onSubmit={handleSubmit}
+          autoComplete="off"
           className="glass-card p-4 sm:p-6 rounded-2xl space-y-4"
         >
           <h3 className="text-base sm:text-lg font-semibold border-b border-slate-800 pb-3">
@@ -169,6 +182,7 @@ export default function AdminDashboard() {
               <input 
                 type="text" 
                 required 
+                autoComplete="off"
                 className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                 placeholder="e.g. John Doe"
                 value={formData.name}
@@ -181,6 +195,7 @@ export default function AdminDashboard() {
               <input 
                 type="text" 
                 required 
+                autoComplete="off"
                 className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                 placeholder="e.g. johndoe"
                 value={formData.username}
@@ -195,6 +210,7 @@ export default function AdminDashboard() {
               <input 
                 type="password" 
                 required={!editingUserId}
+                autoComplete="new-password"
                 className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                 placeholder="••••••••"
                 value={formData.password}
@@ -223,7 +239,7 @@ export default function AdminDashboard() {
                   value={formData.teacherId}
                   onChange={e => setFormData({ ...formData, teacherId: e.target.value })}
                 >
-                  <option value="">-- No Teacher Assigned (Unassigned) --</option>
+                  <option value="">-- Unassigned --</option>
                   {teachersList.map(t => (
                     <option key={t.id} value={t.id}>Teacher: {t.name} (@{t.username})</option>
                   ))}
@@ -240,21 +256,25 @@ export default function AdminDashboard() {
             >
               Cancel
             </button>
-            <button type="submit" className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium">
-              {editingUserId ? 'Save Changes' : 'Create Account'}
+            <button 
+              type="submit" 
+              disabled={submitting}
+              className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-60"
+            >
+              {submitting ? 'Saving...' : editingUserId ? 'Save Changes' : 'Create Account'}
             </button>
           </div>
         </motion.form>
       )}
 
       <div className="glass-card rounded-2xl overflow-x-auto">
-        <table className="w-full text-left border-collapse text-sm min-w-[650px]">
+        <table className="w-full text-left border-collapse text-sm min-w-[700px]">
           <thead>
             <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
               <th className="px-6 py-4 font-medium">Name</th>
               <th className="px-6 py-4 font-medium">Username</th>
               <th className="px-6 py-4 font-medium">Role</th>
-              <th className="px-6 py-4 font-medium">Assigned Teacher</th>
+              <th className="px-6 py-4 font-medium">Link Student to Teacher</th>
               <th className="px-6 py-4 font-medium text-right">Actions</th>
             </tr>
           </thead>
@@ -262,7 +282,7 @@ export default function AdminDashboard() {
             {usersList.map(u => (
               <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
                 <td className="px-6 py-4 font-medium text-slate-200">{u.name}</td>
-                <td className="px-6 py-4 font-mono text-slate-400">{u.username}</td>
+                <td className="px-6 py-4 font-mono text-slate-400">@{u.username}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
                     u.role === 'admin' 
@@ -274,14 +294,27 @@ export default function AdminDashboard() {
                     {u.role}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-xs font-medium text-indigo-300">
-                  {u.role === 'student' ? getTeacherName(u.teacherId) : 'N/A (Staff)'}
+                <td className="px-6 py-4">
+                  {u.role === 'student' ? (
+                    <select
+                      value={u.teacherId || ''}
+                      onChange={e => handleQuickAssignTeacher(u.id, e.target.value)}
+                      className="glass-input px-3 py-1 rounded-lg text-xs bg-slate-900 text-indigo-200 border border-indigo-500/40"
+                    >
+                      <option value="">-- Unassigned --</option>
+                      {teachersList.map(t => (
+                        <option key={t.id} value={t.id}>Teacher: {t.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-slate-500">Staff Account</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
                   <button 
                     onClick={() => handleStartEdit(u)}
                     className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
-                    title="Edit Credentials & Linkage"
+                    title="Edit User"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>

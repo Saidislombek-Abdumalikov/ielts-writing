@@ -24,6 +24,7 @@ export default function TeacherDashboard() {
   // Student form state
   const [showCreateStudent, setShowCreateStudent] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [submittingStudent, setSubmittingStudent] = useState(false);
   const [deleteStudentData, setDeleteStudentData] = useState<{ id: string; username: string } | null>(null);
   const [studentFormData, setStudentFormData] = useState({
     name: '',
@@ -105,10 +106,19 @@ export default function TeacherDashboard() {
     setNewTask(defaultTask);
   };
 
+  const handleOpenStudentModal = () => {
+    setEditingStudentId(null);
+    setStudentFormData({ name: '', username: '', password: '' });
+    setStudentError('');
+    setShowCreateStudent(!showCreateStudent);
+  };
+
   const handleCreateOrUpdateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingStudent) return;
     setStudentError('');
     setStudentSuccess('');
+    setSubmittingStudent(true);
 
     try {
       if (editingStudentId) {
@@ -121,6 +131,7 @@ export default function TeacherDashboard() {
       } else {
         if (!studentFormData.password) {
           setStudentError('Password is required for new students');
+          setSubmittingStudent(false);
           return;
         }
         await createUser({
@@ -130,16 +141,18 @@ export default function TeacherDashboard() {
           role: 'student',
           teacherId: dbUser!.id
         });
-        setStudentSuccess(`Student "${studentFormData.name}" registered and linked to your account!`);
+        setStudentSuccess(`Student "${studentFormData.name}" registered under your account!`);
       }
 
       setShowCreateStudent(false);
       setEditingStudentId(null);
       setStudentFormData({ name: '', username: '', password: '' });
-      loadData();
+      await loadData();
       setTimeout(() => setStudentSuccess(''), 3500);
     } catch (err: any) {
       setStudentError(err.message || 'Failed to save student account');
+    } finally {
+      setSubmittingStudent(false);
     }
   };
 
@@ -150,6 +163,7 @@ export default function TeacherDashboard() {
       username: st.username,
       password: ''
     });
+    setStudentError('');
     setShowCreateStudent(true);
   };
 
@@ -159,7 +173,7 @@ export default function TeacherDashboard() {
       await deleteUser(deleteStudentData.id);
       setStudentSuccess(`Student @${deleteStudentData.username} deleted.`);
       setDeleteStudentData(null);
-      loadData();
+      await loadData();
       setTimeout(() => setStudentSuccess(''), 3500);
     } catch (err: any) {
       setStudentError(err.message || 'Failed to delete student');
@@ -209,7 +223,7 @@ export default function TeacherDashboard() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Teacher Dashboard</h2>
-          <p className="text-sm text-slate-400">Manage your assignments, track your linked students, and evaluate submissions.</p>
+          <p className="text-sm text-slate-400">Manage your assignments, track your students, and evaluate submissions.</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
@@ -217,7 +231,7 @@ export default function TeacherDashboard() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder={activeTab === 'assignments' ? "Search assignments..." : "Search linked students..."} 
+              placeholder={activeTab === 'assignments' ? "Search assignments..." : "Search students..."} 
               className="glass-input pl-9 pr-4 py-2 rounded-xl text-sm w-full sm:w-64"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -240,13 +254,7 @@ export default function TeacherDashboard() {
             </button>
           ) : (
             <button 
-              onClick={() => {
-                setShowCreateStudent(!showCreateStudent);
-                if (editingStudentId) {
-                  setEditingStudentId(null);
-                  setStudentFormData({ name: '', username: '', password: '' });
-                }
-              }}
+              onClick={handleOpenStudentModal}
               className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
             >
               <UserPlus className="w-4 h-4 mr-2" />
@@ -279,24 +287,24 @@ export default function TeacherDashboard() {
           }`}
         >
           <Users className="w-4 h-4 mr-2" />
-          My Linked Students ({teacherStudents.length})
+          My Students ({teacherStudents.length})
         </button>
       </div>
 
       {studentSuccess && (
-        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm rounded-xl">
+        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm rounded-xl font-medium">
           {studentSuccess}
         </div>
       )}
 
       {studentError && (
-        <div className="p-3 bg-red-500/20 border border-red-500/30 text-red-300 text-sm rounded-xl flex items-center">
+        <div className="p-3 bg-red-500/20 border border-red-500/30 text-red-300 text-sm rounded-xl flex items-center font-medium">
           <AlertCircle className="w-4 h-4 mr-2" />
           {studentError}
         </div>
       )}
 
-      {/* TAB 2: MY LINKED STUDENTS MANAGEMENT */}
+      {/* TAB 2: MY STUDENTS MANAGEMENT */}
       {activeTab === 'students' && (
         <div className="space-y-6">
           {showCreateStudent && (
@@ -304,10 +312,11 @@ export default function TeacherDashboard() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               onSubmit={handleCreateOrUpdateStudent}
+              autoComplete="off"
               className="glass-card p-4 sm:p-6 rounded-2xl space-y-4"
             >
               <h3 className="text-base sm:text-lg font-semibold border-b border-slate-800 pb-3">
-                {editingStudentId ? 'Edit Student Account Details' : 'Register & Link New Student Account'}
+                {editingStudentId ? 'Edit Student Account Details' : 'Register New Student Account'}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -316,6 +325,7 @@ export default function TeacherDashboard() {
                   <input 
                     type="text" 
                     required 
+                    autoComplete="off"
                     className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                     placeholder="e.g. Ali Karimov"
                     value={studentFormData.name}
@@ -328,6 +338,7 @@ export default function TeacherDashboard() {
                   <input 
                     type="text" 
                     required 
+                    autoComplete="off"
                     className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                     placeholder="e.g. ali_karimov"
                     value={studentFormData.username}
@@ -342,6 +353,7 @@ export default function TeacherDashboard() {
                   <input 
                     type="password" 
                     required={!editingStudentId}
+                    autoComplete="new-password"
                     className="w-full glass-input px-4 py-2 rounded-xl text-sm"
                     placeholder="••••••••"
                     value={studentFormData.password}
@@ -358,8 +370,12 @@ export default function TeacherDashboard() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium">
-                  {editingStudentId ? 'Save Changes' : 'Register Student'}
+                <button 
+                  type="submit" 
+                  disabled={submittingStudent}
+                  className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-60"
+                >
+                  {submittingStudent ? 'Saving...' : editingStudentId ? 'Save Changes' : 'Register Student'}
                 </button>
               </div>
             </motion.form>
@@ -371,7 +387,7 @@ export default function TeacherDashboard() {
                 <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
                   <th className="px-6 py-4 font-medium">Student Name</th>
                   <th className="px-6 py-4 font-medium">Username</th>
-                  <th className="px-6 py-4 font-medium">Linkage Status</th>
+                  <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium text-right">Actions</th>
                 </tr>
               </thead>
@@ -382,7 +398,7 @@ export default function TeacherDashboard() {
                     <td className="px-6 py-4 font-mono text-slate-400">@{st.username}</td>
                     <td className="px-6 py-4">
                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        Linked to You
+                        My Student
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
@@ -408,7 +424,7 @@ export default function TeacherDashboard() {
                 {filteredStudents.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-10 text-center text-slate-500">
-                      No linked students found. Click "Register New Student" above to add students directly to your account.
+                      No students found. Click "Register New Student" above to add students directly to your account.
                     </td>
                   </tr>
                 )}
