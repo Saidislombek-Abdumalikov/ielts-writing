@@ -12,6 +12,15 @@ import { getPendingSubmissions, markPendingSubmissionSynced } from './draftManag
 
 // ============== TYPES ==============
 
+export interface DbGroup {
+  id: string;           // Firestore doc ID
+  name: string;         // e.g. "IELTS Morning 2026"
+  teacherId: string;    // DbUser doc ID of assigned teacher
+  status: 'active' | 'archived';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface DbUser {
   id: string;           // Firestore doc ID
   name: string;
@@ -19,12 +28,14 @@ export interface DbUser {
   email: string | null;
   passwordHash: string; // simple hash for username/password auth
   role: 'student' | 'teacher' | 'admin';
+  groupId?: string | null; // Student's assigned group ID
   createdAt: Date;
 }
 
 export interface DbTask {
   id: string;
   teacherId: string;
+  groupId?: string | null;  // Group ID this task is assigned to
   title: string;
   ieltsType: string;         // 'task1' | 'task2' | 'mock'
   assignmentMode: string;
@@ -144,7 +155,7 @@ export async function getUserById(id: string): Promise<DbUser | null> {
   return { id: d.id, ...d.data(), createdAt: toDateRequired(d.data().createdAt) } as DbUser;
 }
 
-export async function createUser(data: { name: string; username: string; password: string; role: string }): Promise<DbUser> {
+export async function createUser(data: { name: string; username: string; password: string; role: string; groupId?: string | null }): Promise<DbUser> {
   const passwordHash = await hashPassword(data.password);
   const now = new Date();
   const docRef = await addDoc(usersCol(), {
@@ -153,6 +164,7 @@ export async function createUser(data: { name: string; username: string; passwor
     email: null,
     passwordHash,
     role: data.role || 'student',
+    groupId: data.groupId || null,
     createdAt: Timestamp.fromDate(now),
   });
   return {
@@ -162,6 +174,7 @@ export async function createUser(data: { name: string; username: string; passwor
     email: null,
     passwordHash,
     role: data.role as any,
+    groupId: data.groupId || null,
     createdAt: now,
   };
 }
@@ -173,16 +186,124 @@ export async function getAllUsers(): Promise<DbUser[]> {
   } as DbUser));
 }
 
-export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string }>): Promise<DbUser> {
+export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string; groupId?: string | null }>): Promise<DbUser> {
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
   if (data.username) updateData.username = data.username.trim().toLowerCase();
   if (data.password) updateData.passwordHash = await hashPassword(data.password);
   if (data.role) updateData.role = data.role;
+  if (data.groupId !== undefined) updateData.groupId = data.groupId;
   
   await updateDoc(doc(firestore, 'users', id), updateData);
   const updated = await getUserById(id);
   return updated!;
+}
+
+export async function assignStudentToGroup(studentId: string, groupId: string | null): Promise<DbUser> {
+  await updateDoc(doc(firestore, 'users', studentId), {
+    groupId: groupId || null,
+  });
+  const updated = await getUserById(studentId);
+  return updated!;
+}
+
+// ============== GROUPS ==============
+
+const groupsCol = () => collection(firestore, 'groups');
+
+let cachedGroups: { groups: DbGroup[]; fetchedAt: number } | null = null;
+
+export async function getAllGroups(): Promise<DbGroup[]> {
+  const now = Date.now();
+  if (cachedGroups && (now - cachedGroups.fetchedAt < 5000)) {
+    return cachedGroups.groups;
+  }
+  try {
+    const snap = await getDocs(query(groupsCol(), orderBy('createdAt', 'desc')));
+    const groups = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbGroup));
+    cachedGroups = { groups, fetchedAt: now };
+    return groups;
+  } catch (e) {
+    if (cachedGroups) return cachedGroups.groups;
+    throw e;
+  }
+}
+
+export async function getGroupById(id: string): Promise<DbGroup | null> {
+  try {
+    const d = await getDoc(doc(firestore, 'groups', id));
+    if (!d.exists()) return null;
+    return {
+      id: d.id,
+      ...d.data(),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbGroup;
+  } catch (e) {
+    console.warn('Group fetch error:', e);
+    return null;
+  }
+}
+
+export async function getGroupsForTeacher(teacherId: string): Promise<DbGroup[]> {
+  const allGroups = await getAllGroups();
+  return allGroups.filter(g => g.teacherId === teacherId && g.status !== 'archived');
+}
+
+export async function createGroup(data: { name: string; teacherId: string }): Promise<DbGroup> {
+  cachedGroups = null;
+  const now = new Date();
+  const docRef = await addDoc(groupsCol(), {
+    name: data.name,
+    teacherId: data.teacherId,
+    status: 'active',
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+  });
+  return {
+    id: docRef.id,
+    name: data.name,
+    teacherId: data.teacherId,
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateGroup(id: string, data: Partial<{ name: string; teacherId: string; status: 'active' | 'archived' }>): Promise<DbGroup> {
+  cachedGroups = null;
+  const now = new Date();
+  const updatePayload: any = { updatedAt: Timestamp.fromDate(now) };
+  if (data.name !== undefined) updatePayload.name = data.name;
+  if (data.teacherId !== undefined) updatePayload.teacherId = data.teacherId;
+  if (data.status !== undefined) updatePayload.status = data.status;
+
+  await updateDoc(doc(firestore, 'groups', id), updatePayload);
+  return (await getGroupById(id))!;
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  cachedGroups = null;
+  // Unassign students from this group
+  const studentsSnap = await getDocs(query(usersCol(), where('groupId', '==', id)));
+  for (const s of studentsSnap.docs) {
+    await updateDoc(s.ref, { groupId: null });
+  }
+  // Delete group
+  await deleteDoc(doc(firestore, 'groups', id));
+}
+
+export async function getTeacherStudents(teacherId: string): Promise<DbUser[]> {
+  const teacherGroups = await getGroupsForTeacher(teacherId);
+  if (teacherGroups.length === 0) return [];
+  const groupIds = new Set(teacherGroups.map(g => g.id));
+  const allUsers = await getAllUsers();
+  return allUsers.filter(u => u.role === 'student' && u.groupId && groupIds.has(u.groupId));
 }
 
 export async function deleteUser(id: string): Promise<void> {
