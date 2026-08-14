@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useAuth } from '../components/AuthContext';
-import { getTaskById, getTaskSubmissions, getFeedbackForSubmission, submitFeedback, updateSubmissionByTeacher, grantExtraTimeForStudent } from '../lib/db';
+import { getTaskById, getTaskSubmissions, getTaskSubmissionsForTeacher, getFeedbackForSubmission, submitFeedback, updateSubmissionByTeacher, grantExtraTimeForStudent } from '../lib/db';
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
@@ -71,7 +71,10 @@ export default function EvaluationWorkspace() {
       const taskData = await getTaskById(taskId);
       setTask(taskData);
 
-      const data = await getTaskSubmissions(taskId);
+      const data = dbUser?.role === 'teacher' && dbUser?.id
+        ? await getTaskSubmissionsForTeacher(taskId, dbUser.id)
+        : await getTaskSubmissions(taskId);
+
       const subs = data.submissions || [];
       setSubmissionsList(subs);
       setMissingStudents(data.missingStudents || []);

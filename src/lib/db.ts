@@ -28,7 +28,8 @@ export interface DbUser {
   email: string | null;
   passwordHash: string; // simple hash for username/password auth
   role: 'student' | 'teacher' | 'admin';
-  groupId?: string | null; // Student's assigned group ID
+  groupId?: string | null;   // Student's assigned group ID
+  teacherId?: string | null; // Student's assigned/linked teacher ID
   createdAt: Date;
 }
 
@@ -155,7 +156,7 @@ export async function getUserById(id: string): Promise<DbUser | null> {
   return { id: d.id, ...d.data(), createdAt: toDateRequired(d.data().createdAt) } as DbUser;
 }
 
-export async function createUser(data: { name: string; username: string; password: string; role: string; groupId?: string | null }): Promise<DbUser> {
+export async function createUser(data: { name: string; username: string; password: string; role: string; groupId?: string | null; teacherId?: string | null }): Promise<DbUser> {
   const passwordHash = await hashPassword(data.password);
   const now = new Date();
   const docRef = await addDoc(usersCol(), {
@@ -165,6 +166,7 @@ export async function createUser(data: { name: string; username: string; passwor
     passwordHash,
     role: data.role || 'student',
     groupId: data.groupId || null,
+    teacherId: data.teacherId || null,
     createdAt: Timestamp.fromDate(now),
   });
   return {
@@ -175,6 +177,7 @@ export async function createUser(data: { name: string; username: string; passwor
     passwordHash,
     role: data.role as any,
     groupId: data.groupId || null,
+    teacherId: data.teacherId || null,
     createdAt: now,
   };
 }
@@ -186,13 +189,14 @@ export async function getAllUsers(): Promise<DbUser[]> {
   } as DbUser));
 }
 
-export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string; groupId?: string | null }>): Promise<DbUser> {
+export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string; groupId?: string | null; teacherId?: string | null }>): Promise<DbUser> {
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
   if (data.username) updateData.username = data.username.trim().toLowerCase();
   if (data.password) updateData.passwordHash = await hashPassword(data.password);
   if (data.role) updateData.role = data.role;
   if (data.groupId !== undefined) updateData.groupId = data.groupId;
+  if (data.teacherId !== undefined) updateData.teacherId = data.teacherId;
   
   await updateDoc(doc(firestore, 'users', id), updateData);
   const updated = await getUserById(id);
@@ -202,6 +206,14 @@ export async function updateUser(id: string, data: Partial<{ name: string; usern
 export async function assignStudentToGroup(studentId: string, groupId: string | null): Promise<DbUser> {
   await updateDoc(doc(firestore, 'users', studentId), {
     groupId: groupId || null,
+  });
+  const updated = await getUserById(studentId);
+  return updated!;
+}
+
+export async function assignStudentToTeacher(studentId: string, teacherId: string | null): Promise<DbUser> {
+  await updateDoc(doc(firestore, 'users', studentId), {
+    teacherId: teacherId || null,
   });
   const updated = await getUserById(studentId);
   return updated!;
@@ -300,10 +312,14 @@ export async function deleteGroup(id: string): Promise<void> {
 
 export async function getTeacherStudents(teacherId: string): Promise<DbUser[]> {
   const teacherGroups = await getGroupsForTeacher(teacherId);
-  if (teacherGroups.length === 0) return [];
   const groupIds = new Set(teacherGroups.map(g => g.id));
   const allUsers = await getAllUsers();
-  return allUsers.filter(u => u.role === 'student' && u.groupId && groupIds.has(u.groupId));
+  return allUsers.filter(u => 
+    u.role === 'student' && (
+      u.teacherId === teacherId || 
+      (u.groupId ? groupIds.has(u.groupId) : false)
+    )
+  );
 }
 
 export async function deleteUser(id: string): Promise<void> {
@@ -750,6 +766,25 @@ export async function getTaskSubmissions(taskId: string): Promise<{ submissions:
     totalStudents: allStudents.length,
     submittedCount,
     missingStudents,
+  };
+}
+
+export async function getTaskSubmissionsForTeacher(taskId: string, teacherId: string): Promise<{ submissions: any[]; totalStudents: number; submittedCount: number; missingStudents: any[] }> {
+  const teacherStudents = await getTeacherStudents(teacherId);
+  const teacherStudentIds = new Set(teacherStudents.map(s => s.id));
+  
+  const result = await getTaskSubmissions(taskId);
+  
+  // Filter submissions to only include students linked to this teacher
+  const filteredSubmissions = result.submissions.filter(item => teacherStudentIds.has(item.student.id));
+  const filteredMissing = result.missingStudents.filter(st => teacherStudentIds.has(st.id));
+  const submittedCount = filteredSubmissions.filter(item => item.submission.status === 'submitted' || item.submission.status === 'graded').length;
+
+  return {
+    submissions: filteredSubmissions,
+    totalStudents: teacherStudents.length,
+    submittedCount,
+    missingStudents: filteredMissing,
   };
 }
 

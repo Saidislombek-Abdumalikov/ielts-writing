@@ -1,23 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
-import { getAllTasks, createTask, updateTask, deleteTask } from '../lib/db';
+import { getAllTasks, createTask, updateTask, deleteTask, getTeacherStudents, createUser, updateUser, deleteUser } from '../lib/db';
 import { uploadTask1Image } from '../lib/storage';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2 } from 'lucide-react';
+import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2, UserPlus, FileText, AlertCircle } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function TeacherDashboard() {
   const { dbUser } = useAuth();
+  const [activeTab, setActiveTab] = useState<'assignments' | 'students'>('assignments');
   const [tasks, setTasks] = useState<any[]>([]);
+  const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Task form state
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState<string | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
-
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState('');
-  
+
+  // Student form state
+  const [showCreateStudent, setShowCreateStudent] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [deleteStudentData, setDeleteStudentData] = useState<{ id: string; username: string } | null>(null);
+  const [studentFormData, setStudentFormData] = useState({
+    name: '',
+    username: '',
+    password: ''
+  });
+  const [studentError, setStudentError] = useState('');
+  const [studentSuccess, setStudentSuccess] = useState('');
+
   const getTwoDaysFromNowString = () => {
     const d = new Date();
     d.setDate(d.getDate() + 2);
@@ -63,16 +78,21 @@ export default function TeacherDashboard() {
     }
   };
 
-  const loadTasks = async () => {
-    const t = await getAllTasks();
+  const loadData = async () => {
+    if (!dbUser) return;
+    const [t, st] = await Promise.all([
+      getAllTasks(),
+      getTeacherStudents(dbUser.id)
+    ]);
     setTasks(t);
+    setTeacherStudents(st);
   };
 
   useEffect(() => {
-    loadTasks();
-  }, []);
+    loadData();
+  }, [dbUser]);
 
-  const handleCreateOrUpdate = async (e: React.FormEvent) => {
+  const handleCreateOrUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingTask) {
       await updateTask(editingTask, newTask);
@@ -81,8 +101,70 @@ export default function TeacherDashboard() {
     }
     setShowCreate(false);
     setEditingTask(null);
-    loadTasks();
+    loadData();
     setNewTask(defaultTask);
+  };
+
+  const handleCreateOrUpdateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStudentError('');
+    setStudentSuccess('');
+
+    try {
+      if (editingStudentId) {
+        await updateUser(editingStudentId, {
+          name: studentFormData.name,
+          username: studentFormData.username,
+          password: studentFormData.password || undefined,
+        });
+        setStudentSuccess('Student credentials updated successfully');
+      } else {
+        if (!studentFormData.password) {
+          setStudentError('Password is required for new students');
+          return;
+        }
+        await createUser({
+          name: studentFormData.name,
+          username: studentFormData.username,
+          password: studentFormData.password,
+          role: 'student',
+          teacherId: dbUser!.id
+        });
+        setStudentSuccess(`Student "${studentFormData.name}" registered and linked to your account!`);
+      }
+
+      setShowCreateStudent(false);
+      setEditingStudentId(null);
+      setStudentFormData({ name: '', username: '', password: '' });
+      loadData();
+      setTimeout(() => setStudentSuccess(''), 3500);
+    } catch (err: any) {
+      setStudentError(err.message || 'Failed to save student account');
+    }
+  };
+
+  const handleStartEditStudent = (st: any) => {
+    setEditingStudentId(st.id);
+    setStudentFormData({
+      name: st.name,
+      username: st.username,
+      password: ''
+    });
+    setShowCreateStudent(true);
+  };
+
+  const handleConfirmDeleteStudent = async () => {
+    if (!deleteStudentData) return;
+    try {
+      await deleteUser(deleteStudentData.id);
+      setStudentSuccess(`Student @${deleteStudentData.username} deleted.`);
+      setDeleteStudentData(null);
+      loadData();
+      setTimeout(() => setStudentSuccess(''), 3500);
+    } catch (err: any) {
+      setStudentError(err.message || 'Failed to delete student');
+      setDeleteStudentData(null);
+    }
   };
 
   const handleEdit = (task: any) => {
@@ -108,7 +190,7 @@ export default function TeacherDashboard() {
     if (deleteTaskId) {
       await deleteTask(deleteTaskId);
       setDeleteTaskId(null);
-      loadTasks();
+      loadData();
     }
   };
 
@@ -117,12 +199,17 @@ export default function TeacherDashboard() {
     t.ieltsType.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const filteredStudents = teacherStudents.filter(st =>
+    st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    st.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-8 animate-fade-up">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-1">Teacher Dashboard</h2>
-          <p className="text-sm text-slate-400">Manage assignments, track student submissions, and evaluate responses.</p>
+          <p className="text-sm text-slate-400">Manage your assignments, track your linked students, and evaluate submissions.</p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
@@ -130,37 +217,218 @@ export default function TeacherDashboard() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search assignments..." 
+              placeholder={activeTab === 'assignments' ? "Search assignments..." : "Search linked students..."} 
               className="glass-input pl-9 pr-4 py-2 rounded-xl text-sm w-full sm:w-64"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
-          
-          <button 
-            onClick={() => {
-              setShowCreate(!showCreate);
-              if (editingTask) {
-                setEditingTask(null);
-                setNewTask(defaultTask);
-              }
-            }}
-            className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Assignment
-          </button>
+
+          {activeTab === 'assignments' ? (
+            <button 
+              onClick={() => {
+                setShowCreate(!showCreate);
+                if (editingTask) {
+                  setEditingTask(null);
+                  setNewTask(defaultTask);
+                }
+              }}
+              className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Assignment
+            </button>
+          ) : (
+            <button 
+              onClick={() => {
+                setShowCreateStudent(!showCreateStudent);
+                if (editingStudentId) {
+                  setEditingStudentId(null);
+                  setStudentFormData({ name: '', username: '', password: '' });
+                }
+              }}
+              className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Register New Student
+            </button>
+          )}
         </div>
       </div>
 
-      {showCreate && (
-        <motion.form 
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="glass-card p-4 sm:p-6 rounded-2xl overflow-hidden"
-          onSubmit={handleCreateOrUpdate}
+      {/* Tab Navigation */}
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => setActiveTab('assignments')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+            activeTab === 'assignments'
+              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+          }`}
         >
-          <h3 className="text-lg sm:text-xl font-semibold mb-6">{editingTask ? 'Edit Assignment' : 'New Assignment'}</h3>
+          <FileText className="w-4 h-4 mr-2" />
+          Assignments ({tasks.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+            activeTab === 'students'
+              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+          }`}
+        >
+          <Users className="w-4 h-4 mr-2" />
+          My Linked Students ({teacherStudents.length})
+        </button>
+      </div>
+
+      {studentSuccess && (
+        <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm rounded-xl">
+          {studentSuccess}
+        </div>
+      )}
+
+      {studentError && (
+        <div className="p-3 bg-red-500/20 border border-red-500/30 text-red-300 text-sm rounded-xl flex items-center">
+          <AlertCircle className="w-4 h-4 mr-2" />
+          {studentError}
+        </div>
+      )}
+
+      {/* TAB 2: MY LINKED STUDENTS MANAGEMENT */}
+      {activeTab === 'students' && (
+        <div className="space-y-6">
+          {showCreateStudent && (
+            <motion.form 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              onSubmit={handleCreateOrUpdateStudent}
+              className="glass-card p-4 sm:p-6 rounded-2xl space-y-4"
+            >
+              <h3 className="text-base sm:text-lg font-semibold border-b border-slate-800 pb-3">
+                {editingStudentId ? 'Edit Student Account Details' : 'Register & Link New Student Account'}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Student Full Name</label>
+                  <input 
+                    type="text" 
+                    required 
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                    placeholder="e.g. Ali Karimov"
+                    value={studentFormData.name}
+                    onChange={e => setStudentFormData({ ...studentFormData, name: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Username (Login ID)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                    placeholder="e.g. ali_karimov"
+                    value={studentFormData.username}
+                    onChange={e => setStudentFormData({ ...studentFormData, username: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    Password {editingStudentId && '(leave blank to keep current)'}
+                  </label>
+                  <input 
+                    type="password" 
+                    required={!editingStudentId}
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                    placeholder="••••••••"
+                    value={studentFormData.password}
+                    onChange={e => setStudentFormData({ ...studentFormData, password: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowCreateStudent(false); setEditingStudentId(null); }}
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium">
+                  {editingStudentId ? 'Save Changes' : 'Register Student'}
+                </button>
+              </div>
+            </motion.form>
+          )}
+
+          <div className="glass-card rounded-2xl overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm min-w-[550px]">
+              <thead>
+                <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
+                  <th className="px-6 py-4 font-medium">Student Name</th>
+                  <th className="px-6 py-4 font-medium">Username</th>
+                  <th className="px-6 py-4 font-medium">Linkage Status</th>
+                  <th className="px-6 py-4 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {filteredStudents.map(st => (
+                  <tr key={st.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-200">{st.name}</td>
+                    <td className="px-6 py-4 font-mono text-slate-400">@{st.username}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Linked to You
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
+                      <button 
+                        onClick={() => handleStartEditStudent(st)}
+                        className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+                        title="Edit Student Credentials"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button 
+                        onClick={() => setDeleteStudentData({ id: st.id, username: st.username })}
+                        className="text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete Student Account"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-slate-500">
+                      No linked students found. Click "Register New Student" above to add students directly to your account.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 1: ASSIGNMENTS & SUBMISSIONS MANAGEMENT */}
+      {activeTab === 'assignments' && (
+        <div className="space-y-6">
+          {showCreate && (
+            <motion.form 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="glass-card p-4 sm:p-6 rounded-2xl overflow-hidden"
+              onSubmit={handleCreateOrUpdateTask}
+            >
+              <h3 className="text-lg sm:text-xl font-semibold mb-6">{editingTask ? 'Edit Assignment' : 'New Assignment'}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="space-y-4">
               <div>
@@ -435,6 +703,8 @@ export default function TeacherDashboard() {
           </table>
         </div>
       </div>
+      </div>
+      )}
 
       <ConfirmModal 
         isOpen={deleteTaskId !== null}
@@ -445,6 +715,17 @@ export default function TeacherDashboard() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTaskId(null)}
+      />
+
+      <ConfirmModal 
+        isOpen={deleteStudentData !== null}
+        title="Delete Student Account"
+        message={`Are you sure you want to delete the student account "${deleteStudentData?.username}"? All submissions associated with this student will be permanently removed.`}
+        confirmText="Delete Student"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmDeleteStudent}
+        onCancel={() => setDeleteStudentData(null)}
       />
     </div>
   );

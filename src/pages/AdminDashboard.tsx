@@ -8,6 +8,7 @@ import ConfirmModal from '../components/ConfirmModal';
 export default function AdminDashboard() {
   const { dbUser } = useAuth();
   const [usersList, setUsersList] = useState<any[]>([]);
+  const [teachersList, setTeachersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -17,7 +18,8 @@ export default function AdminDashboard() {
     name: '',
     username: '',
     password: '',
-    role: 'student' as 'student' | 'teacher' | 'admin'
+    role: 'student' as 'student' | 'teacher' | 'admin',
+    teacherId: ''
   });
 
   const [error, setError] = useState('');
@@ -27,9 +29,9 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       const data = await getAllUsers();
-      // Filter based on role
+      setTeachersList(data.filter(u => u.role === 'teacher'));
       if (dbUser?.role === 'teacher') {
-        setUsersList(data.filter(u => u.role === 'student'));
+        setUsersList(data.filter(u => u.role === 'student' && u.teacherId === dbUser.id));
       } else {
         setUsersList(data);
       }
@@ -50,20 +52,26 @@ export default function AdminDashboard() {
     setSuccess('');
 
     try {
+      const payload: any = { ...formData };
+      if (dbUser?.role === 'teacher') {
+        payload.role = 'student';
+        payload.teacherId = dbUser.id;
+      }
+      
       if (editingUserId) {
-        await updateUser(editingUserId, formData);
+        await updateUser(editingUserId, payload);
         setSuccess('User account updated successfully');
       } else {
         if (!formData.password) {
           setError('Password is required for new accounts');
           return;
         }
-        await createUser(formData);
+        await createUser(payload);
         setSuccess('User account created successfully');
       }
       setShowCreate(false);
       setEditingUserId(null);
-      setFormData({ name: '', username: '', password: '', role: 'student' });
+      setFormData({ name: '', username: '', password: '', role: 'student', teacherId: '' });
       loadUsers();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -77,7 +85,8 @@ export default function AdminDashboard() {
       name: u.name,
       username: u.username,
       password: '',
-      role: u.role
+      role: u.role,
+      teacherId: u.teacherId || ''
     });
     setShowCreate(true);
   };
@@ -96,16 +105,22 @@ export default function AdminDashboard() {
     }
   };
 
+  const getTeacherName = (tId?: string) => {
+    if (!tId) return '—';
+    const found = teachersList.find(t => t.id === tId);
+    return found ? found.name : 'Unknown';
+  };
+
   return (
     <div className="space-y-6 animate-fade-up">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-1 flex items-center">
             <Users className="w-6 h-6 mr-2 text-indigo-400" />
-            User Account Management
+            User Account & Teacher Linkage Management
           </h2>
           <p className="text-sm text-slate-400">
-            Manage teacher and student user accounts, usernames, and login credentials.
+            Manage teacher and student user accounts, assign students to specific teachers, and control access.
           </p>
         </div>
 
@@ -114,13 +129,13 @@ export default function AdminDashboard() {
             setShowCreate(!showCreate);
             if (editingUserId) {
               setEditingUserId(null);
-              setFormData({ name: '', username: '', password: '', role: 'student' });
+              setFormData({ name: '', username: '', password: '', role: 'student', teacherId: '' });
             }
           }}
           className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center w-full sm:w-fit shadow-lg"
         >
           <UserPlus className="w-4 h-4 mr-2" />
-          {showCreate ? 'Close Form' : 'Create User Account'}
+          {showCreate ? 'Close Form' : 'Create Account'}
         </button>
       </div>
 
@@ -145,7 +160,7 @@ export default function AdminDashboard() {
           className="glass-card p-4 sm:p-6 rounded-2xl space-y-4"
         >
           <h3 className="text-base sm:text-lg font-semibold border-b border-slate-800 pb-3">
-            {editingUserId ? 'Edit Account Credentials' : 'New User Registration'}
+            {editingUserId ? 'Edit Account Details' : 'New User Registration'}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -199,6 +214,22 @@ export default function AdminDashboard() {
                 {dbUser?.role === 'admin' && <option value="admin">Admin</option>}
               </select>
             </div>
+
+            {formData.role === 'student' && dbUser?.role === 'admin' && (
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-indigo-300 mb-1">Assigned Teacher (Teacher Linkage)</label>
+                <select 
+                  className="w-full glass-input px-4 py-2 rounded-xl text-sm appearance-none bg-slate-900"
+                  value={formData.teacherId}
+                  onChange={e => setFormData({ ...formData, teacherId: e.target.value })}
+                >
+                  <option value="">-- No Teacher Assigned (Unassigned) --</option>
+                  {teachersList.map(t => (
+                    <option key={t.id} value={t.id}>Teacher: {t.name} (@{t.username})</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end space-x-3 pt-2">
@@ -217,12 +248,13 @@ export default function AdminDashboard() {
       )}
 
       <div className="glass-card rounded-2xl overflow-x-auto">
-        <table className="w-full text-left border-collapse text-sm min-w-[550px]">
+        <table className="w-full text-left border-collapse text-sm min-w-[650px]">
           <thead>
             <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
               <th className="px-6 py-4 font-medium">Name</th>
               <th className="px-6 py-4 font-medium">Username</th>
               <th className="px-6 py-4 font-medium">Role</th>
+              <th className="px-6 py-4 font-medium">Assigned Teacher</th>
               <th className="px-6 py-4 font-medium text-right">Actions</th>
             </tr>
           </thead>
@@ -242,16 +274,19 @@ export default function AdminDashboard() {
                     {u.role}
                   </span>
                 </td>
+                <td className="px-6 py-4 text-xs font-medium text-indigo-300">
+                  {u.role === 'student' ? getTeacherName(u.teacherId) : 'N/A (Staff)'}
+                </td>
                 <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
                   <button 
                     onClick={() => handleStartEdit(u)}
                     className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
-                    title="Edit Credentials"
+                    title="Edit Credentials & Linkage"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
 
-                  {dbUser?.role === 'admin' && u.id !== dbUser?.id && (
+                  {u.id !== dbUser?.id && (
                     <button 
                       onClick={() => setDeleteUserData({ id: u.id, username: u.username })}
                       className="text-red-400 hover:text-red-300 transition-colors"
@@ -266,7 +301,7 @@ export default function AdminDashboard() {
 
             {usersList.length === 0 && !loading && (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                   No user accounts found.
                 </td>
               </tr>
