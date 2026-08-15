@@ -1,21 +1,44 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext.tsx';
-import { getTasksForStudent } from '../lib/db';
+import { getTasksForStudent, syncPendingSubmissions } from '../lib/db';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { BookOpen, Clock, CheckCircle, ArrowRight, Search, Trophy, Sparkles, Filter } from 'lucide-react';
+import { BookOpen, Clock, CheckCircle, ArrowRight, Search, Trophy, Sparkles, Filter, WifiOff, RefreshCw } from 'lucide-react';
 
 export default function StudentDashboard() {
   const { dbUser } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'submitted' | 'graded'>('all');
+  const [syncedBanner, setSyncedBanner] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (dbUser) {
-      getTasksForStudent(dbUser.id).then(setTasks);
+  const loadStudentTasks = async () => {
+    if (!dbUser) return;
+    try {
+      if (navigator.onLine) {
+        const syncedCount = await syncPendingSubmissions(dbUser.id);
+        if (syncedCount > 0) {
+          setSyncedBanner(`🎉 ${syncedCount} offline ${syncedCount === 1 ? 'submission' : 'submissions'} synced successfully!`);
+          setTimeout(() => setSyncedBanner(''), 6000);
+        }
+      }
+      const data = await getTasksForStudent(dbUser.id);
+      setTasks(data);
+    } catch (err) {
+      console.warn('Student dashboard load warning:', err);
     }
+  };
+
+  useEffect(() => {
+    loadStudentTasks();
+
+    const handleOnline = () => {
+      loadStudentTasks();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, [dbUser]);
 
   const gradedTasksCount = tasks.filter(t => t.submission?.status === 'graded').length;
@@ -40,6 +63,13 @@ export default function StudentDashboard() {
           <h2 className="text-3xl font-bold tracking-tight mb-2">Student Workspace</h2>
           <p className="text-slate-400">Select an assignment to start writing or view teacher evaluation feedback.</p>
         </div>
+
+        {syncedBanner && (
+          <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold rounded-xl flex items-center shadow-lg">
+            <CheckCircle className="w-4 h-4 mr-2 text-emerald-400" />
+            {syncedBanner}
+          </div>
+        )}
 
         {gradedTasksCount > 0 && (
           <motion.div 

@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { AuthProvider, useAuth } from './components/AuthContext';
 import { ThemeProvider } from './components/ThemeContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import TaskWorkspace from './pages/TaskWorkspace';
@@ -32,22 +33,24 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode, role?: 
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <div className="min-h-screen flex flex-col font-sans transition-colors duration-150 pt-6 sm:pt-8">
-          <div className="min-h-screen flex flex-col">
-            <BrowserRouter>
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/tasks/:id" element={<ProtectedRoute role="student"><TaskWorkspace /></ProtectedRoute>} />
-                <Route path="/teacher/submissions/:id" element={<ProtectedRoute role="teacher"><EvaluationWorkspace /></ProtectedRoute>} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </BrowserRouter>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <div className="min-h-screen flex flex-col font-sans transition-colors duration-150 pt-6 sm:pt-8">
+            <div className="min-h-screen flex flex-col">
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/tasks/:id" element={<ProtectedRoute role="student"><TaskWorkspace /></ProtectedRoute>} />
+                  <Route path="/teacher/submissions/:id" element={<ProtectedRoute role="teacher"><EvaluationWorkspace /></ProtectedRoute>} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </BrowserRouter>
+            </div>
           </div>
-        </div>
-      </AuthProvider>
-    </ThemeProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

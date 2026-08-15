@@ -535,61 +535,64 @@ export default function TaskWorkspace() {
   // Submit Handler
   const handleConfirmSubmit = async () => {
     if (!id || !dbUser) return;
+    setSubmitting(true);
+    setShowConfirmSubmit(false);
+    isSubmittedRef.current = true;
+
+    const isMock = task?.ieltsType === 'mock';
+    const t1Text = isMock ? (activeTab === 'task1' ? content : task1Content) : content;
+    const t2Text = isMock ? (activeTab === 'task2' ? content : task2Content) : '';
+    
+    const t1Wc = t1Text.trim() ? t1Text.trim().split(/\s+/).length : 0;
+    const t2Wc = t2Text.trim() ? t2Text.trim().split(/\s+/).length : 0;
+    const totalWc = isMock ? (t1Wc + t2Wc) : (content.trim() ? content.trim().split(/\s+/).length : 0);
+    const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
+
+    const saveOfflineFallback = async () => {
+      const operationId = `sub_pending_${id}_${dbUser.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const pendingSub: PendingSubmission = {
+        operationId,
+        taskId: id,
+        studentId: dbUser.id,
+        content: combinedText,
+        task1Content: t1Text,
+        task2Content: t2Text,
+        task1WordCount: t1Wc,
+        task2WordCount: t2Wc,
+        wordCount: totalWc,
+        pasteAttemptCount: pasteAttempts,
+        suspiciousBurstFlag: suspiciousBurst,
+        status: 'submitted',
+        submittedAtLocal: Date.now(),
+        startedAtMs: startedAtMsRef.current || Date.now(),
+        expiresAtMs: expiresAtMsRef.current || (Date.now() + 3600000),
+        activeTab,
+        isMock,
+        synced: false,
+      };
+
+      await savePendingSubmission(pendingSub);
+      setIsPendingSync(true);
+      setSubmission({
+        id: operationId,
+        status: 'submitted',
+        content: combinedText,
+        wordCount: totalWc,
+        submittedAt: new Date(),
+        isPendingSync: true,
+      });
+
+      setToastNotification('🎉 Exam completed! Your answers are safely saved offline on this device and will be submitted automatically when connection returns.');
+      setTimeout(() => setToastNotification(''), 9000);
+    };
+
+    if (!navigator.onLine) {
+      await saveOfflineFallback();
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      setSubmitting(true);
-      setShowConfirmSubmit(false);
-      isSubmittedRef.current = true;
-
-      const isMock = task?.ieltsType === 'mock';
-      const t1Text = isMock ? (activeTab === 'task1' ? content : task1Content) : content;
-      const t2Text = isMock ? (activeTab === 'task2' ? content : task2Content) : '';
-      
-      const t1Wc = t1Text.trim() ? t1Text.trim().split(/\s+/).length : 0;
-      const t2Wc = t2Text.trim() ? t2Text.trim().split(/\s+/).length : 0;
-      const totalWc = isMock ? (t1Wc + t2Wc) : (content.trim() ? content.trim().split(/\s+/).length : 0);
-
-      const combinedText = isMock ? `--- TASK 1 ---\n${t1Text}\n\n--- TASK 2 ---\n${t2Text}` : content;
-
-      if (!navigator.onLine) {
-        const operationId = `sub_pending_${id}_${dbUser.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const pendingSub: PendingSubmission = {
-          operationId,
-          taskId: id,
-          studentId: dbUser.id,
-          content: combinedText,
-          task1Content: t1Text,
-          task2Content: t2Text,
-          task1WordCount: t1Wc,
-          task2WordCount: t2Wc,
-          wordCount: totalWc,
-          pasteAttemptCount: pasteAttempts,
-          suspiciousBurstFlag: suspiciousBurst,
-          status: 'submitted',
-          submittedAtLocal: Date.now(),
-          startedAtMs: startedAtMsRef.current || Date.now(),
-          expiresAtMs: expiresAtMsRef.current || (Date.now() + 3600000),
-          activeTab,
-          isMock,
-          synced: false,
-        };
-
-        await savePendingSubmission(pendingSub);
-        setIsPendingSync(true);
-        setSubmission({
-          id: operationId,
-          status: 'submitted',
-          content: combinedText,
-          wordCount: totalWc,
-          submittedAt: new Date(),
-          isPendingSync: true,
-        });
-
-        setToastNotification('🎉 Test completed! Your answers are safely saved on this device and will be submitted automatically when the internet connection returns.');
-        setTimeout(() => setToastNotification(''), 9000);
-        setSubmitting(false);
-        return;
-      }
-
       const res = await upsertSubmission(id, dbUser.id, {
         content: combinedText,
         task1Content: t1Text,
@@ -605,14 +608,13 @@ export default function TaskWorkspace() {
       setSubmission({ ...res, status: 'submitted' });
       lastSavedContentRef.current = combinedText;
       setSaveStatus('saved');
-      
       await clearLocalDraft(id, dbUser.id);
       
       setToastNotification('🎉 Exam successfully submitted! Your teacher has received your response.');
       setTimeout(() => setToastNotification(''), 6000);
     } catch (err: any) {
-      isSubmittedRef.current = false;
-      setError(err.message || 'Failed to submit response');
+      console.warn('Network submission error, saving as offline pending submission:', err);
+      await saveOfflineFallback();
     } finally {
       setSubmitting(false);
     }
