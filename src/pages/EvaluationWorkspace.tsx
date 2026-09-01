@@ -5,7 +5,7 @@ import { getTaskById, getTaskSubmissions, getTaskSubmissionsForTeacher, getFeedb
 import { motion } from 'motion/react';
 import { 
   ArrowLeft, Users, FileText, CheckCircle, Clock, 
-  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X, History, ZoomIn
+  Sparkles, Send, ShieldAlert, Award, AlertCircle, RefreshCw, UserX, Unlock, Edit3, Save, X, History, ZoomIn, Download
 } from 'lucide-react';
 import ImageLightboxModal from '../components/ImageLightboxModal';
 
@@ -214,6 +214,56 @@ export default function EvaluationWorkspace() {
     }
   };
 
+  const downloadGradebookCSV = () => {
+    if (!task) return;
+
+    const rows: string[][] = [
+      ['Student Name', 'Username', 'Status', 'Band Score', 'Total Words', 'Task 1 Words', 'Task 2 Words', 'Time Spent', 'Submission Date', 'Teacher Comments']
+    ];
+
+    submissionsList.forEach(item => {
+      const s = item.student;
+      const sub = item.submission;
+      rows.push([
+        `"${(s?.name || 'Unknown').replace(/"/g, '""')}"`,
+        `"${(s?.username || '').replace(/"/g, '""')}"`,
+        `"${sub?.status || 'submitted'}"`,
+        `"${sub?.feedback?.bandScore || 'Not graded'}"`,
+        `"${sub?.wordCount || 0}"`,
+        `"${sub?.task1WordCount || 0}"`,
+        `"${sub?.task2WordCount || 0}"`,
+        `"${getTimeSpent(sub)}"`,
+        `"${sub?.submittedAt ? new Date(sub.submittedAt).toLocaleString() : ''}"`,
+        `"${(sub?.feedback?.comments || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+      ]);
+    });
+
+    missingStudents.forEach(st => {
+      rows.push([
+        `"${(st.name || 'Unknown').replace(/"/g, '""')}"`,
+        `"${(st.username || '').replace(/"/g, '""')}"`,
+        `"Missing"`,
+        `"—"`,
+        `"0"`,
+        `"0"`,
+        `"0"`,
+        `"—"`,
+        `"—"`,
+        `"—"`
+      ]);
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    const safeTitle = (task.title || 'IELTS_Exam').replace(/[^a-zA-Z0-9_-]/g, '_');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${safeTitle}_Gradebook.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const downloadAsDoc = () => {
     if (!selectedSub) return;
 
@@ -321,7 +371,16 @@ export default function EvaluationWorkspace() {
           Back to Dashboard
         </button>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={downloadGradebookCSV}
+            className="glass-card px-3 py-1.5 rounded-xl text-xs font-medium flex items-center text-slate-300 hover:text-white transition-colors border border-slate-700/60 hover:border-slate-600"
+            title="Download full class gradebook as CSV spreadsheet"
+          >
+            <Download className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+            Export Gradebook (CSV)
+          </button>
+
           <button 
             onClick={() => fetchSubmissionsData(false)}
             disabled={refreshing}
