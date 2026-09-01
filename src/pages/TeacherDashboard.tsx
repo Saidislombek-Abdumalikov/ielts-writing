@@ -353,6 +353,48 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
+      {/* Teacher Class Overview Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Active Assignments</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{tasks.length}</strong>
+              <span className="text-xs text-slate-500 font-medium">({tasks.filter(t => t.ieltsType === 'mock').length} mocks)</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <Users className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">My Students</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{teacherStudents.length}</strong>
+              <span className="text-xs text-slate-500 font-medium">enrolled</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Class Groups</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{groups.length}</strong>
+              <span className="text-xs text-slate-500 font-medium">cohorts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Tab Navigation */}
       <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
         <button
