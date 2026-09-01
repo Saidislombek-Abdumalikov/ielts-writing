@@ -13,6 +13,7 @@ export default function StudentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'submitted' | 'graded'>('all');
   const [syncedBanner, setSyncedBanner] = useState('');
+  const [feedbackModalTask, setFeedbackModalTask] = useState<any>(null);
   const navigate = useNavigate();
 
   const loadStudentTasks = async () => {
@@ -252,9 +253,16 @@ export default function StudentDashboard() {
                     </p>
 
                     {sub?.status === 'graded' && sub.feedback?.comments && (
-                      <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200 mb-4 line-clamp-2">
-                        <strong className="block text-emerald-400 font-semibold mb-0.5 flex items-center">
-                          <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-400" /> Teacher Feedback:
+                      <div 
+                        onClick={() => setFeedbackModalTask(task)}
+                        className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200 mb-4 line-clamp-2 cursor-pointer hover:bg-emerald-950/50 hover:border-emerald-700/60 transition-all group"
+                        title="Click to expand feedback"
+                      >
+                        <strong className="block text-emerald-400 font-semibold mb-0.5 flex items-center justify-between">
+                          <span className="flex items-center">
+                            <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-400" /> Teacher Feedback:
+                          </span>
+                          <span className="text-[10px] text-emerald-400/80 group-hover:underline">Expand ↗</span>
                         </strong>
                         {sub.feedback.comments}
                       </div>
@@ -285,6 +293,79 @@ export default function StudentDashboard() {
           </>
         )}
       </div>
+
+      {/* Quick Feedback Preview Modal */}
+      {feedbackModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card max-w-lg w-full p-6 rounded-2xl border border-slate-700 space-y-4 shadow-2xl relative"
+          >
+            <div className="flex justify-between items-start">
+              <div className="flex items-center space-x-2">
+                <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                  <Award className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-100">{feedbackModalTask.title}</h3>
+                  <p className="text-xs text-slate-400">Teacher Evaluation Feedback</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setFeedbackModalTask(null)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-400 block font-medium">Assessed Score</span>
+                <strong className="text-2xl font-black text-emerald-300">
+                  Band {feedbackModalTask.submission?.feedback?.bandScore || 'N/A'}
+                </strong>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-slate-400 block font-medium">Word Count</span>
+                <strong className="text-sm font-semibold text-slate-200">
+                  {feedbackModalTask.submission?.wordCount || 0} words
+                </strong>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-emerald-400 flex items-center">
+                <Sparkles className="w-3.5 h-3.5 mr-1" /> Detailed Teacher Comments
+              </label>
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 text-sm text-slate-200 max-h-60 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                {feedbackModalTask.submission?.feedback?.comments || 'No written comments provided.'}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button 
+                onClick={() => setFeedbackModalTask(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-800 text-slate-300 transition-colors"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => {
+                  const id = feedbackModalTask.id;
+                  setFeedbackModalTask(null);
+                  navigate(`/tasks/${id}`);
+                }}
+                className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium flex items-center"
+              >
+                <span>Open Full Exam Workspace</span>
+                <ArrowRight className="w-4 h-4 ml-1.5" />
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
