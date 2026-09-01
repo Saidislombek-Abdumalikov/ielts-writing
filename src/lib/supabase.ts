@@ -1,8 +1,5 @@
 /// <reference types="vite/client" />
-/**
- * Supabase Integration Contract & Data Access Layer Interface.
- * Defines the future Supabase PostgreSQL database tables and client configuration.
- */
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export interface SupabaseConfig {
   supabaseUrl: string;
@@ -14,6 +11,24 @@ export function getSupabaseConfig(): SupabaseConfig {
     supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
     supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
   };
+}
+
+let supabaseClient: SupabaseClient | null = null;
+
+export function getSupabaseClient(): SupabaseClient | null {
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+  if (!supabaseClient) {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  }
+  return supabaseClient;
 }
 
 export interface DatabaseSchema {

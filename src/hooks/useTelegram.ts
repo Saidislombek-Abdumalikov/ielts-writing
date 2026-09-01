@@ -86,9 +86,12 @@ export function useTelegram() {
 
   return {
     isTelegram,
+    initData: window.Telegram?.WebApp?.initData || '',
+    user: tgUser,
     tgUser,
     colorScheme,
     webApp: window.Telegram?.WebApp,
     triggerHaptic,
+    hapticFeedback: window.Telegram?.WebApp?.HapticFeedback,
   };
 }

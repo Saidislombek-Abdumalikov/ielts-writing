@@ -1,12 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getUserById, getUserByUsername, verifyPassword, seedDefaultAccounts } from '../lib/db';
+import { verifyTelegramWithBackend, resolveTelegramUserSession } from '../lib/services/authService';
 
-interface User {
+export interface User {
   id: string;
+  telegramId?: string | null;
   username: string;
   name: string;
   email: string | null;
   role: 'teacher' | 'student' | 'admin';
+  groupId?: string | null;
+  teacherId?: string | null;
+  photoUrl?: string | null;
 }
 
 interface AuthContextType {
@@ -18,6 +23,7 @@ interface AuthContextType {
   impersonateUser: (targetUserId: string) => Promise<void>;
   exitImpersonation: () => Promise<void>;
   login: (username: string, password: string) => Promise<User>;
+  loginWithTelegram: (payload: { initData?: string; widgetData?: any }) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   impersonateUser: async () => {},
   exitImpersonation: async () => {},
   login: async () => { throw new Error('Not initialized'); },
+  loginWithTelegram: async () => { throw new Error('Not initialized'); },
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -117,6 +124,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return safeUser;
   };
 
+  const loginWithTelegram = async (payload: { initData?: string; widgetData?: any }): Promise<User> => {
+    const verifiedIdentity = await verifyTelegramWithBackend(payload);
+    const sessionUser = await resolveTelegramUserSession(verifiedIdentity);
+    
+    const safeUser: User = {
+      id: sessionUser.id,
+      telegramId: sessionUser.telegramId || null,
+      username: sessionUser.username,
+      name: sessionUser.name,
+      email: sessionUser.email,
+      role: sessionUser.role,
+      groupId: sessionUser.groupId || null,
+      teacherId: sessionUser.teacherId || null,
+      photoUrl: sessionUser.photoUrl || null
+    };
+
+    localStorage.setItem('userId', safeUser.id);
+    localStorage.setItem(`user_profile_cache_${safeUser.id}`, JSON.stringify(safeUser));
+    localStorage.removeItem('originalAdminUserId');
+    setDbUser(safeUser);
+    setIsImpersonating(false);
+    return safeUser;
+  };
+
   const signIn = (user: User) => {
     localStorage.setItem('userId', user.id);
     localStorage.setItem(`user_profile_cache_${user.id}`, JSON.stringify(user));
@@ -170,7 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ dbUser, loading, isImpersonating, signIn, signOut, impersonateUser, exitImpersonation, login }}>
+    <AuthContext.Provider value={{ dbUser, loading, isImpersonating, signIn, signOut, impersonateUser, exitImpersonation, login, loginWithTelegram }}>
       {children}
     </AuthContext.Provider>
   );

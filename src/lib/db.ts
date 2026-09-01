@@ -23,6 +23,7 @@ export interface DbGroup {
 
 export interface DbUser {
   id: string;           // Firestore doc ID
+  telegramId?: string | null; // Verified Telegram User ID
   name: string;
   username: string;
   email: string | null;
@@ -150,13 +151,21 @@ export async function getUserByUsername(username: string): Promise<DbUser | null
   return { id: d.id, ...d.data(), createdAt: toDateRequired(d.data().createdAt) } as DbUser;
 }
 
+export async function getUserByTelegramId(telegramId: string): Promise<DbUser | null> {
+  const q = query(usersCol(), where('telegramId', '==', String(telegramId)));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data(), createdAt: toDateRequired(d.data().createdAt) } as DbUser;
+}
+
 export async function getUserById(id: string): Promise<DbUser | null> {
   const d = await getDoc(doc(firestore, 'users', id));
   if (!d.exists()) return null;
   return { id: d.id, ...d.data(), createdAt: toDateRequired(d.data().createdAt) } as DbUser;
 }
 
-export async function createUser(data: { name: string; username: string; password: string; role: string; groupId?: string | null; teacherId?: string | null }): Promise<DbUser> {
+export async function createUser(data: { name: string; username: string; password: string; role: string; telegramId?: string | null; groupId?: string | null; teacherId?: string | null }): Promise<DbUser> {
   const cleanUsername = data.username.trim().toLowerCase();
   const existing = await getUserByUsername(cleanUsername);
   if (existing) {
@@ -168,6 +177,7 @@ export async function createUser(data: { name: string; username: string; passwor
   const docRef = await addDoc(usersCol(), {
     name: data.name,
     username: cleanUsername,
+    telegramId: data.telegramId || null,
     email: null,
     passwordHash,
     role: data.role || 'student',
@@ -179,6 +189,7 @@ export async function createUser(data: { name: string; username: string; passwor
     id: docRef.id,
     name: data.name,
     username: cleanUsername,
+    telegramId: data.telegramId || null,
     email: null,
     passwordHash,
     role: data.role as any,
@@ -195,12 +206,13 @@ export async function getAllUsers(): Promise<DbUser[]> {
   } as DbUser));
 }
 
-export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string; groupId?: string | null; teacherId?: string | null }>): Promise<DbUser> {
+export async function updateUser(id: string, data: Partial<{ name: string; username: string; password: string; role: string; telegramId?: string | null; groupId?: string | null; teacherId?: string | null }>): Promise<DbUser> {
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
   if (data.username) updateData.username = data.username.trim().toLowerCase();
   if (data.password) updateData.passwordHash = await hashPassword(data.password);
   if (data.role) updateData.role = data.role;
+  if (data.telegramId !== undefined) updateData.telegramId = data.telegramId;
   if (data.groupId !== undefined) updateData.groupId = data.groupId;
   if (data.teacherId !== undefined) updateData.teacherId = data.teacherId;
   
