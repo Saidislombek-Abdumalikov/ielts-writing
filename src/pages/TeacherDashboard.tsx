@@ -6,12 +6,14 @@ import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2, UserPlus, FileText, AlertCircle } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
+import { SkeletonTaskCard, SkeletonTable } from '../components/ui/Skeleton';
 
 export default function TeacherDashboard() {
   const { dbUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'assignments' | 'students'>('assignments');
   const [tasks, setTasks] = useState<any[]>([]);
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Task form state
@@ -81,12 +83,18 @@ export default function TeacherDashboard() {
 
   const loadData = async () => {
     if (!dbUser) return;
-    const [t, st] = await Promise.all([
-      getTasksForTeacher(dbUser.id),
-      getTeacherStudents(dbUser.id)
-    ]);
-    setTasks(t);
-    setTeacherStudents(st);
+    try {
+      const [t, st] = await Promise.all([
+        getTasksForTeacher(dbUser.id),
+        getTeacherStudents(dbUser.id)
+      ]);
+      setTasks(t);
+      setTeacherStudents(st);
+    } catch (err) {
+      console.warn('Teacher dashboard load error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -647,77 +655,81 @@ export default function TeacherDashboard() {
           <span>Active Assignments & Submissions</span>
           <span className="text-sm font-normal text-slate-400">{filteredTasks.length} tasks</span>
         </h3>
-        <div className="glass-card rounded-2xl overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead>
-              <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/50">
-                <th className="px-6 py-4 font-medium">Title</th>
-                <th className="px-6 py-4 font-medium">Type & Mode</th>
-                <th className="px-6 py-4 font-medium">Start Date</th>
-                <th className="px-6 py-4 font-medium">Deadline</th>
-                <th className="px-6 py-4 font-medium text-right">Submissions & Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50">
-              {filteredTasks.map(task => (
-                <tr key={task.id} className="hover:bg-slate-800/20 transition-colors">
-                  <td className="px-6 py-4 font-medium">
-                    <div>{task.title}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="px-2 py-1 text-xs rounded bg-slate-800 text-slate-300 uppercase tracking-wider">
-                        {task.ieltsType}
-                      </span>
-                      {task.assignmentMode === 'partly' && (
-                        <span className="px-2 py-1 text-xs rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Partly
+        {loading ? (
+          <SkeletonTable />
+        ) : (
+          <div className="glass-card rounded-2xl overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[600px]">
+              <thead>
+                <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/50">
+                  <th className="px-6 py-4 font-medium">Title</th>
+                  <th className="px-6 py-4 font-medium">Type & Mode</th>
+                  <th className="px-6 py-4 font-medium">Start Date</th>
+                  <th className="px-6 py-4 font-medium">Deadline</th>
+                  <th className="px-6 py-4 font-medium text-right">Submissions & Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {filteredTasks.map(task => (
+                  <tr key={task.id} className="hover:bg-slate-800/20 transition-colors">
+                    <td className="px-6 py-4 font-medium">
+                      <div>{task.title}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="px-2 py-1 text-xs rounded bg-slate-800 text-slate-300 uppercase tracking-wider">
+                          {task.ieltsType}
                         </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-slate-400 text-xs">
-                    {task.startDate ? new Date(task.startDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Immediate'}
-                  </td>
-                  <td className="px-6 py-4 text-slate-400 text-xs">
-                    {new Date(task.dueDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                  </td>
-                  <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
-                    <button 
-                      onClick={() => navigate(`/teacher/submissions/${task.id}`)}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold flex items-center transition-colors"
-                      title="View Submissions & Missing Roster"
-                    >
-                      <Users className="w-3.5 h-3.5 mr-1.5" />
-                      Submissions
-                    </button>
-                    <button 
-                      onClick={() => handleEdit(task)}
-                      className="text-slate-400 hover:text-white transition-colors"
-                      title="Edit Task"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => setDeleteTaskId(task.id)}
-                      className="text-red-400 hover:text-red-300 transition-colors"
-                      title="Delete Task"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredTasks.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
-                    No assignments found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        {task.assignmentMode === 'partly' && (
+                          <span className="px-2 py-1 text-xs rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            Partly
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-400 text-xs">
+                      {task.startDate ? new Date(task.startDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Immediate'}
+                    </td>
+                    <td className="px-6 py-4 text-slate-400 text-xs">
+                      {new Date(task.dueDate).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
+                      <button 
+                        onClick={() => navigate(`/teacher/submissions/${task.id}`)}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold flex items-center transition-colors"
+                        title="View Submissions & Missing Roster"
+                      >
+                        <Users className="w-3.5 h-3.5 mr-1.5" />
+                        Submissions
+                      </button>
+                      <button 
+                        onClick={() => handleEdit(task)}
+                        className="text-slate-400 hover:text-white transition-colors"
+                        title="Edit Task"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setDeleteTaskId(task.id)}
+                        className="text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete Task"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredTasks.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                      No assignments found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
       </div>
       )}
