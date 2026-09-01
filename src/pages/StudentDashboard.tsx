@@ -13,6 +13,7 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'submitted' | 'graded'>('all');
+  const [courseFilter, setCourseFilter] = useState<string>('all');
   const [syncedBanner, setSyncedBanner] = useState('');
   const [feedbackModalTask, setFeedbackModalTask] = useState<any>(null);
   const navigate = useNavigate();
@@ -71,7 +72,9 @@ export default function StudentDashboard() {
     else if (statusFilter === 'submitted') matchesStatus = subStatus === 'submitted';
     else if (statusFilter === 'graded') matchesStatus = subStatus === 'graded';
 
-    return matchesSearch && matchesStatus;
+    const matchesCourse = courseFilter === 'all' || task.courseId === courseFilter;
+
+    return matchesSearch && matchesStatus && matchesCourse;
   });
 
   return (
@@ -151,8 +154,8 @@ export default function StudentDashboard() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 glass-card p-3 rounded-2xl">
-        <div className="flex flex-wrap gap-2 text-xs font-medium">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 glass-card p-3 rounded-2xl">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
           <button
             onClick={() => setStatusFilter('all')}
             className={`px-3 py-1.5 rounded-xl transition-all ${
@@ -167,7 +170,7 @@ export default function StudentDashboard() {
               statusFilter === 'pending' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Pending / Draft ({tasks.filter(t => !t.submission?.status || t.submission?.status === 'draft').length})
+            Pending ({tasks.filter(t => !t.submission?.status || t.submission?.status === 'draft').length})
           </button>
           <button
             onClick={() => setStatusFilter('submitted')}
@@ -185,6 +188,23 @@ export default function StudentDashboard() {
           >
             Graded ({gradedTasksCount})
           </button>
+
+          {courses.length > 0 && (
+            <div className="ml-0 sm:ml-2">
+              <select
+                value={courseFilter}
+                onChange={e => setCourseFilter(e.target.value)}
+                className="glass-input px-3 py-1.5 rounded-xl text-xs bg-slate-900 appearance-none text-slate-300 border border-slate-700"
+              >
+                <option value="all">📚 All Course Tracks</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="relative">
