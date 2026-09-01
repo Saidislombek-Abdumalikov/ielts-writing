@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { getAllUsers, createUser, updateUser, deleteUser } from '../lib/db';
 import { motion } from 'motion/react';
-import { UserPlus, Users, Edit2, Trash2, Shield, AlertCircle, LogIn } from 'lucide-react';
+import { UserPlus, Users, Edit2, Trash2, Shield, AlertCircle, LogIn, Search, GraduationCap, UserCheck, AlertTriangle } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 export default function AdminDashboard() {
-  const { dbUser } = useAuth();
+  const { dbUser, impersonateUser } = useAuth();
   const [usersList, setUsersList] = useState<any[]>([]);
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,6 +14,8 @@ export default function AdminDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [deleteUserData, setDeleteUserData] = useState<{ id: string; username: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher' | 'admin'>('all');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -46,6 +48,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const studentsCount = usersList.filter(u => u.role === 'student').length;
+  const teachersCount = usersList.filter(u => u.role === 'teacher').length;
+  const unlinkedStudentsCount = usersList.filter(u => u.role === 'student' && !u.teacherId).length;
+
+  const filteredUsers = usersList.filter(u => {
+    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          u.username.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
 
   const handleOpenCreateModal = () => {
     setEditingUserId(null);
@@ -135,10 +148,10 @@ export default function AdminDashboard() {
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-1 flex items-center">
             <Users className="w-6 h-6 mr-2 text-indigo-400" />
-            User Account & Teacher Linkage Management
+            Education Center & User Management
           </h2>
           <p className="text-sm text-slate-400">
-            Manage user accounts, assign students to specific teachers directly from the list, and control access.
+            Manage student & teacher accounts, assign students to teachers, and monitor platform activity.
           </p>
         </div>
 
@@ -149,6 +162,98 @@ export default function AdminDashboard() {
           <UserPlus className="w-4 h-4 mr-2" />
           {showCreate ? 'Close Form' : 'Create Account'}
         </button>
+      </div>
+
+      {/* Center Overview Metrics */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="glass-card p-4 rounded-2xl flex items-center space-x-3 border border-slate-800">
+          <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block font-medium">Total Users</span>
+            <strong className="text-xl font-bold text-slate-100">{usersList.length}</strong>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 rounded-2xl flex items-center space-x-3 border border-slate-800">
+          <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+            <Shield className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block font-medium">Teachers</span>
+            <strong className="text-xl font-bold text-purple-300">{teachersCount}</strong>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 rounded-2xl flex items-center space-x-3 border border-slate-800">
+          <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <GraduationCap className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block font-medium">Students</span>
+            <strong className="text-xl font-bold text-emerald-300">{studentsCount}</strong>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 rounded-2xl flex items-center space-x-3 border border-slate-800">
+          <div className={`p-2.5 rounded-xl border ${unlinkedStudentsCount > 0 ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 block font-medium">Unlinked Students</span>
+            <strong className={`text-xl font-bold ${unlinkedStudentsCount > 0 ? 'text-amber-300' : 'text-slate-300'}`}>{unlinkedStudentsCount}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Role Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 glass-card p-3 rounded-2xl">
+        <div className="flex flex-wrap gap-1.5 text-xs font-medium">
+          <button
+            onClick={() => setRoleFilter('all')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              roleFilter === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            All Users ({usersList.length})
+          </button>
+          <button
+            onClick={() => setRoleFilter('student')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              roleFilter === 'student' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Students ({studentsCount})
+          </button>
+          <button
+            onClick={() => setRoleFilter('teacher')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              roleFilter === 'teacher' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Teachers ({teachersCount})
+          </button>
+          <button
+            onClick={() => setRoleFilter('admin')}
+            className={`px-3 py-1.5 rounded-xl transition-all ${
+              roleFilter === 'admin' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Admins ({usersList.filter(u => u.role === 'admin').length})
+          </button>
+        </div>
+
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name or username..."
+            className="glass-input pl-9 pr-4 py-1.5 rounded-xl text-xs w-full sm:w-64"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
 
       {success && (
@@ -279,7 +384,7 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
-            {usersList.map(u => (
+            {filteredUsers.map(u => (
               <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
                 <td className="px-6 py-4 font-medium text-slate-200">{u.name}</td>
                 <td className="px-6 py-4 font-mono text-slate-400">@{u.username}</td>
@@ -332,10 +437,10 @@ export default function AdminDashboard() {
               </tr>
             ))}
 
-            {usersList.length === 0 && !loading && (
+            {filteredUsers.length === 0 && !loading && (
               <tr>
                 <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                  No user accounts found.
+                  No user accounts found matching your search or filters.
                 </td>
               </tr>
             )}
