@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext.tsx';
-import { getTasksForStudent, syncPendingSubmissions } from '../lib/db';
+import { getTasksForStudent, syncPendingSubmissions, getAllCourses, DbCourse } from '../lib/db';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { BookOpen, Clock, CheckCircle, ArrowRight, Search, Trophy, Sparkles, Filter, WifiOff, RefreshCw, PenTool, Award } from 'lucide-react';
+import { BookOpen, Clock, CheckCircle, ArrowRight, Search, Trophy, Sparkles, Filter, WifiOff, RefreshCw, PenTool, Award, GraduationCap } from 'lucide-react';
 import { SkeletonTaskCard } from '../components/ui/Skeleton';
 
 export default function StudentDashboard() {
   const { dbUser } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
+  const [courses, setCourses] = useState<DbCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'submitted' | 'graded'>('all');
@@ -26,8 +27,12 @@ export default function StudentDashboard() {
           setTimeout(() => setSyncedBanner(''), 6000);
         }
       }
-      const data = await getTasksForStudent(dbUser.id);
+      const [data, crs] = await Promise.all([
+        getTasksForStudent(dbUser.id),
+        getAllCourses(),
+      ]);
       setTasks(data);
+      setCourses(crs);
     } catch (err) {
       console.warn('Student dashboard load warning:', err);
     } finally {
@@ -237,6 +242,13 @@ export default function StudentDashboard() {
                         {sub?.status === 'draft' && (
                           <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                             In Progress
+                          </span>
+                        )}
+
+                        {task.courseId && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center">
+                            <BookOpen className="w-3 h-3 mr-1" />
+                            {courses.find(c => c.id === task.courseId)?.title || 'Curriculum Track'}
                           </span>
                         )}
                       </div>

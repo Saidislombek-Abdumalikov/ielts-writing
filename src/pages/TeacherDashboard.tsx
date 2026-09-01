@@ -101,6 +101,7 @@ export default function TeacherDashboard() {
     imageUrl: '',
     timerMinutes: 40,
     groupId: null as string | null,
+    courseId: null as string | null,
     startDate: new Date().toISOString().slice(0, 16),
     dueDate: getTwoDaysFromNowString()
   };
@@ -355,6 +356,7 @@ export default function TeacherDashboard() {
       imageUrl: task.imageUrl || '',
       timerMinutes: task.timerMinutes || 40,
       groupId: task.groupId || null,
+      courseId: task.courseId || null,
       startDate: task.startDate ? new Date(task.startDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       dueDate: new Date(task.dueDate).toISOString().slice(0, 16)
     });
@@ -891,6 +893,24 @@ export default function TeacherDashboard() {
                   ))}
                 </select>
               </div>
+
+              {courses.length > 0 && (
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1 flex items-center">
+                    <BookOpen className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Linked Course Track (Optional)
+                  </label>
+                  <select 
+                    className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm bg-slate-900" 
+                    value={newTask.courseId || ''} 
+                    onChange={e => setNewTask({...newTask, courseId: e.target.value || null})}
+                  >
+                    <option value="">-- General / Independent Task --</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>📚 {c.title} ({c.ieltsTrack})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               {newTask.assignmentMode === 'partly' && (
                 <div>
