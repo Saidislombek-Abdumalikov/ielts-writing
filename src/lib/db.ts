@@ -882,7 +882,12 @@ export async function getTasksForStudent(studentId: string): Promise<any[]> {
   const visibleTasks = tasks.filter(task => {
     if (!task.teacherId) return true; // Admin/System default test -> visible to everyone
     if (adminIds.has(task.teacherId)) return true; // Admin test -> visible to everyone
-    if (studentTeacherId && task.teacherId === studentTeacherId) return true; // Created by student's assigned teacher
+    if (studentTeacherId && task.teacherId === studentTeacherId) {
+      if (task.groupId) {
+        return student?.groupId === task.groupId;
+      }
+      return true; // No specific group restriction -> visible to all students of this teacher
+    }
     return false; // Hidden from students not linked to this teacher
   });
 

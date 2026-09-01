@@ -1,18 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
-import { getTasksForTeacher, createTask, updateTask, deleteTask, getTeacherStudents, createUser, updateUser, deleteUser } from '../lib/db';
+import { 
+  DbGroup, 
+  getTasksForTeacher, 
+  createTask, 
+  updateTask, 
+  deleteTask, 
+  getTeacherStudents, 
+  createUser, 
+  updateUser, 
+  deleteUser,
+  getGroupsForTeacher,
+  createGroup,
+  deleteGroup,
+  assignStudentToGroup
+} from '../lib/db';
 import { uploadTask1Image } from '../lib/storage';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2, UserPlus, FileText, AlertCircle } from 'lucide-react';
+import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2, UserPlus, FileText, AlertCircle, Layers, FolderPlus } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import { SkeletonTaskCard, SkeletonTable } from '../components/ui/Skeleton';
 
 export default function TeacherDashboard() {
   const { dbUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'assignments' | 'students'>('assignments');
+  const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'groups'>('assignments');
   const [tasks, setTasks] = useState<any[]>([]);
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
+  const [groups, setGroups] = useState<DbGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -31,10 +46,18 @@ export default function TeacherDashboard() {
   const [studentFormData, setStudentFormData] = useState({
     name: '',
     username: '',
-    password: ''
+    password: '',
+    groupId: ''
   });
   const [studentError, setStudentError] = useState('');
   const [studentSuccess, setStudentSuccess] = useState('');
+
+  // Group form state
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [submittingGroup, setSubmittingGroup] = useState(false);
+  const [groupError, setGroupError] = useState('');
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
 
   const getTwoDaysFromNowString = () => {
     const d = new Date();
@@ -54,6 +77,7 @@ export default function TeacherDashboard() {
     task2Prompt: '',
     imageUrl: '',
     timerMinutes: 40,
+    groupId: null as string | null,
     startDate: new Date().toISOString().slice(0, 16),
     dueDate: getTwoDaysFromNowString()
   };
@@ -84,12 +108,14 @@ export default function TeacherDashboard() {
   const loadData = async () => {
     if (!dbUser) return;
     try {
-      const [t, st] = await Promise.all([
+      const [t, st, grp] = await Promise.all([
         getTasksForTeacher(dbUser.id),
-        getTeacherStudents(dbUser.id)
+        getTeacherStudents(dbUser.id),
+        getGroupsForTeacher(dbUser.id)
       ]);
       setTasks(t);
       setTeacherStudents(st);
+      setGroups(grp);
     } catch (err) {
       console.warn('Teacher dashboard load error:', err);
     } finally {
@@ -169,7 +195,8 @@ export default function TeacherDashboard() {
     setStudentFormData({
       name: st.name,
       username: st.username,
-      password: ''
+      password: '',
+      groupId: st.groupId || ''
     });
     setStudentError('');
     setShowCreateStudent(true);
@@ -189,6 +216,43 @@ export default function TeacherDashboard() {
     }
   };
 
+  const handleCreateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim() || submittingGroup || !dbUser) return;
+    setSubmittingGroup(true);
+    setGroupError('');
+    try {
+      await createGroup({ name: newGroupName.trim(), teacherId: dbUser.id });
+      setNewGroupName('');
+      setShowCreateGroup(false);
+      await loadData();
+    } catch (err: any) {
+      setGroupError(err.message || 'Failed to create class group');
+    } finally {
+      setSubmittingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!deleteGroupId) return;
+    try {
+      await deleteGroup(deleteGroupId);
+      setDeleteGroupId(null);
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete group:', err);
+    }
+  };
+
+  const handleAssignStudentGroup = async (studentId: string, groupId: string | null) => {
+    try {
+      await assignStudentToGroup(studentId, groupId);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to assign student group:', err);
+    }
+  };
+
   const handleEdit = (task: any) => {
     setNewTask({
       title: task.title,
@@ -201,6 +265,7 @@ export default function TeacherDashboard() {
       task2Prompt: task.task2Prompt || '',
       imageUrl: task.imageUrl || '',
       timerMinutes: task.timerMinutes || 40,
+      groupId: task.groupId || null,
       startDate: task.startDate ? new Date(task.startDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       dueDate: new Date(task.dueDate).toISOString().slice(0, 16)
     });
@@ -226,6 +291,10 @@ export default function TeacherDashboard() {
     st.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const filteredGroups = groups.filter(g =>
+    g.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-8 animate-fade-up">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
@@ -239,14 +308,14 @@ export default function TeacherDashboard() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder={activeTab === 'assignments' ? "Search assignments..." : "Search students..."} 
+              placeholder={activeTab === 'assignments' ? "Search assignments..." : activeTab === 'students' ? "Search students..." : "Search groups..."} 
               className="glass-input pl-9 pr-4 py-2 rounded-xl text-sm w-full sm:w-64"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
 
-          {activeTab === 'assignments' ? (
+          {activeTab === 'assignments' && (
             <button 
               onClick={() => {
                 setShowCreate(!showCreate);
@@ -260,13 +329,25 @@ export default function TeacherDashboard() {
               <Plus className="w-4 h-4 mr-2" />
               Create Assignment
             </button>
-          ) : (
+          )}
+
+          {activeTab === 'students' && (
             <button 
               onClick={handleOpenStudentModal}
               className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Register New Student
+            </button>
+          )}
+
+          {activeTab === 'groups' && (
+            <button 
+              onClick={() => setShowCreateGroup(true)}
+              className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
+            >
+              <FolderPlus className="w-4 h-4 mr-2" />
+              New Class Group
             </button>
           )}
         </div>
@@ -296,6 +377,18 @@ export default function TeacherDashboard() {
         >
           <Users className="w-4 h-4 mr-2" />
           My Students ({teacherStudents.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('groups')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+            activeTab === 'groups'
+              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+          }`}
+        >
+          <Layers className="w-4 h-4 mr-2" />
+          My Groups ({groups.length})
         </button>
       </div>
 
@@ -395,6 +488,7 @@ export default function TeacherDashboard() {
                 <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
                   <th className="px-6 py-4 font-medium">Student Name</th>
                   <th className="px-6 py-4 font-medium">Username</th>
+                  <th className="px-6 py-4 font-medium">Class Group</th>
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium text-right">Actions</th>
                 </tr>
@@ -404,6 +498,18 @@ export default function TeacherDashboard() {
                   <tr key={st.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-200">{st.name}</td>
                     <td className="px-6 py-4 font-mono text-slate-400">@{st.username}</td>
+                    <td className="px-6 py-4">
+                      <select
+                        value={st.groupId || ''}
+                        onChange={e => handleAssignStudentGroup(st.id, e.target.value || null)}
+                        className="glass-input text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-200"
+                      >
+                        <option value="">No Group</option>
+                        {groups.map(g => (
+                          <option key={g.id} value={g.id}>{g.name}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-6 py-4">
                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                         My Student
@@ -431,13 +537,128 @@ export default function TeacherDashboard() {
 
                 {filteredStudents.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-10 text-center text-slate-500">
+                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
                       No students found. Click "Register New Student" above to add students directly to your account.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: GROUPS & CLASSES MANAGEMENT */}
+      {activeTab === 'groups' && (
+        <div className="space-y-6">
+          {showCreateGroup && (
+            <motion.form 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              onSubmit={handleCreateGroup}
+              className="glass-card p-4 sm:p-6 rounded-2xl space-y-4"
+            >
+              <h3 className="text-base sm:text-lg font-semibold border-b border-slate-800 pb-3 flex items-center">
+                <FolderPlus className="w-5 h-5 mr-2 text-indigo-400" />
+                Create New Class Group
+              </h3>
+
+              {groupError && (
+                <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30 text-xs text-red-300">
+                  {groupError}
+                </div>
+              )}
+
+              <div className="max-w-md space-y-2">
+                <label className="block text-xs font-medium text-slate-400">Class Group Name</label>
+                <input 
+                  type="text" 
+                  required 
+                  autoComplete="off"
+                  className="w-full glass-input px-4 py-2.5 rounded-xl text-sm"
+                  placeholder="e.g. IELTS Morning Group A"
+                  value={newGroupName}
+                  onChange={e => setNewGroupName(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowCreateGroup(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submittingGroup}
+                  className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-60"
+                >
+                  {submittingGroup ? 'Creating...' : 'Create Class Group'}
+                </button>
+              </div>
+            </motion.form>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredGroups.map(group => {
+              const studentsInGroup = teacherStudents.filter(s => s.groupId === group.id);
+              const tasksForGroup = tasks.filter(t => t.groupId === group.id);
+
+              return (
+                <motion.div
+                  key={group.id}
+                  whileHover={{ y: -4 }}
+                  className="glass-card p-6 rounded-2xl flex flex-col justify-between space-y-4 relative overflow-hidden"
+                >
+                  <div>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <button
+                        onClick={() => setDeleteGroupId(group.id)}
+                        className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                        title="Delete Group"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <h4 className="text-lg font-bold text-slate-100 mb-1">{group.name}</h4>
+                    <p className="text-xs text-slate-400">Created: {new Date(group.createdAt).toLocaleDateString()}</p>
+
+                    <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-800/60 text-xs">
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block mb-0.5">Students</span>
+                        <strong className="text-base text-slate-200">{studentsInGroup.length}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-slate-400 block mb-0.5">Targeted Tasks</span>
+                        <strong className="text-base text-indigo-300">{tasksForGroup.length}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setActiveTab('students')}
+                      className="w-full text-xs py-2 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 hover:text-white transition-colors flex items-center justify-center font-medium"
+                    >
+                      <Users className="w-3.5 h-3.5 mr-1.5" />
+                      Manage Students in Group
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            {filteredGroups.length === 0 && (
+              <div className="col-span-full text-center py-12 text-slate-500 glass-card rounded-2xl">
+                No class groups found. Click "New Class Group" above to create one.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -487,6 +708,22 @@ export default function TeacherDashboard() {
                     <option value="partly">Partly (e.g. Focus area)</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-400 mb-1 flex items-center">
+                  <Layers className="w-3.5 h-3.5 mr-1 text-indigo-400" /> Target Group / Class
+                </label>
+                <select 
+                  className="w-full glass-input px-4 py-2 rounded-lg appearance-none text-sm bg-slate-900" 
+                  value={newTask.groupId || ''} 
+                  onChange={e => setNewTask({...newTask, groupId: e.target.value || null})}
+                >
+                  <option value="">👥 All My Students (No Group Restriction)</option>
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>🎯 {g.name}</option>
+                  ))}
+                </select>
               </div>
               
               {newTask.assignmentMode === 'partly' && (
@@ -754,6 +991,17 @@ export default function TeacherDashboard() {
         variant="danger"
         onConfirm={handleConfirmDeleteStudent}
         onCancel={() => setDeleteStudentData(null)}
+      />
+
+      <ConfirmModal 
+        isOpen={deleteGroupId !== null}
+        title="Delete Class Group"
+        message="Are you sure you want to delete this class group? Students will remain linked to your account with no group assigned."
+        confirmText="Delete Group"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleDeleteGroup}
+        onCancel={() => setDeleteGroupId(null)}
       />
     </div>
   );
