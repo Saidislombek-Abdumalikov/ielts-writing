@@ -45,7 +45,15 @@ export default function StudentDashboard() {
     return () => window.removeEventListener('online', handleOnline);
   }, [dbUser]);
 
-  const gradedTasksCount = tasks.filter(t => t.submission?.status === 'graded').length;
+  const gradedTasks = tasks.filter(t => t.submission?.status === 'graded');
+  const gradedTasksCount = gradedTasks.length;
+  const submittedTasksCount = tasks.filter(t => t.submission?.status === 'submitted' || t.submission?.status === 'graded').length;
+  const totalWordsWritten = tasks.reduce((acc, t) => acc + (t.submission?.wordCount || 0), 0);
+  
+  const validScores = gradedTasks.map(t => parseFloat(t.submission?.feedback?.bandScore)).filter(s => !isNaN(s) && s > 0);
+  const avgBandScore = validScores.length > 0 
+    ? (validScores.reduce((acc, s) => acc + s, 0) / validScores.length).toFixed(1)
+    : null;
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -88,6 +96,52 @@ export default function StudentDashboard() {
             🔔 {gradedTasksCount} {gradedTasksCount === 1 ? 'Assignment' : 'Assignments'} Graded with Teacher Feedback!
           </motion.div>
         )}
+      </div>
+
+      {/* Student Analytics Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <Trophy className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Average Band Score</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">
+                {avgBandScore ? `Band ${avgBandScore}` : '—'}
+              </strong>
+              {avgBandScore && (
+                <span className="text-[11px] text-slate-500 font-normal">({gradedTasksCount} graded)</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+            <BookOpen className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Assignments Progress</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{submittedTasksCount}</strong>
+              <span className="text-xs text-slate-500 font-medium">/ {tasks.length} submitted</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <PenTool className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Practice Volume</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{totalWordsWritten.toLocaleString()}</strong>
+              <span className="text-xs text-slate-500 font-medium">words written</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
