@@ -26,14 +26,16 @@ export default function AdminDashboard() {
   const [deleteUserData, setDeleteUserData] = useState<{ id: string; username: string } | null>(null);
   const [deleteCenterData, setDeleteCenterData] = useState<{ id: string; name: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher' | 'admin'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher'>('all');
   const [centerFilter, setCenterFilter] = useState<string>('all');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     password: '',
-    role: 'student' as 'student' | 'teacher' | 'admin',
+    role: 'student' as 'student' | 'teacher',
     teacherId: '',
     centerId: '',
   });
@@ -43,9 +45,6 @@ export default function AdminDashboard() {
     code: '',
     address: '',
   });
-
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const loadData = async () => {
     try {
@@ -59,7 +58,8 @@ export default function AdminDashboard() {
       if (dbUser?.role === 'teacher') {
         setUsersList(usersData.filter(u => u.role === 'student' && u.teacherId === dbUser.id));
       } else {
-        setUsersList(usersData);
+        // Exclude system admin accounts so admins are completely hidden from regular rosters
+        setUsersList(usersData.filter(u => u.role !== 'admin'));
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch platform data');
@@ -334,14 +334,14 @@ export default function AdminDashboard() {
 
       {/* Search & Role Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 glass-card p-3 rounded-2xl">
-        <div className="flex flex-wrap gap-1.5 text-xs font-medium">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium">
           <button
             onClick={() => setRoleFilter('all')}
             className={`px-3 py-1.5 rounded-xl transition-all ${
               roleFilter === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            All Users ({usersList.length})
+            All Accounts ({usersList.length})
           </button>
           <button
             onClick={() => setRoleFilter('student')}
@@ -358,14 +358,6 @@ export default function AdminDashboard() {
             }`}
           >
             Teachers ({teachersCount})
-          </button>
-          <button
-            onClick={() => setRoleFilter('admin')}
-            className={`px-3 py-1.5 rounded-xl transition-all ${
-              roleFilter === 'admin' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Admins ({usersList.filter(u => u.role === 'admin').length})
           </button>
 
           {centersList.length > 0 && (
@@ -413,55 +405,6 @@ export default function AdminDashboard() {
       {/* ================= USERS TAB ================= */}
       {activeTab === 'users' && (
         <div className="space-y-4">
-          {/* Search & Role Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 glass-card p-3 rounded-2xl">
-            <div className="flex flex-wrap gap-1.5 text-xs font-medium">
-              <button
-                onClick={() => setRoleFilter('all')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
-                  roleFilter === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                All Users ({usersList.length})
-              </button>
-              <button
-                onClick={() => setRoleFilter('student')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
-                  roleFilter === 'student' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Students ({studentsCount})
-              </button>
-              <button
-                onClick={() => setRoleFilter('teacher')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
-                  roleFilter === 'teacher' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Teachers ({teachersCount})
-              </button>
-              <button
-                onClick={() => setRoleFilter('admin')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${
-                  roleFilter === 'admin' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Admins ({usersList.filter(u => u.role === 'admin').length})
-              </button>
-            </div>
-
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name or username..."
-                className="glass-input pl-9 pr-4 py-1.5 rounded-xl text-xs w-full sm:w-64"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </div>
-
           {showCreate && (
             <motion.form 
               initial={{ opacity: 0, height: 0 }}
@@ -524,8 +467,7 @@ export default function AdminDashboard() {
                     onChange={e => setFormData({ ...formData, role: e.target.value as any })}
                   >
                     <option value="student">Student</option>
-                    {dbUser?.role === 'admin' && <option value="teacher">Teacher</option>}
-                    {dbUser?.role === 'admin' && <option value="admin">Admin</option>}
+                    <option value="teacher">Teacher</option>
                   </select>
                 </div>
 
