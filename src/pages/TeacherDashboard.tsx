@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { 
   DbGroup, 
+  DbCourse,
   getTasksForTeacher, 
   createTask, 
   updateTask, 
@@ -13,21 +14,30 @@ import {
   getGroupsForTeacher,
   createGroup,
   deleteGroup,
-  assignStudentToGroup
+  assignStudentToGroup,
+  getCoursesForTeacher,
+  createCourse,
+  updateCourse,
+  deleteCourse
 } from '../lib/db';
 import { uploadTask1Image } from '../lib/storage';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
-import { Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, Upload, X, Loader2, UserPlus, FileText, AlertCircle, Layers, FolderPlus } from 'lucide-react';
+import { 
+  Plus, Users, Search, Edit2, Trash2, Calendar, Image as ImageIcon, 
+  Upload, X, Loader2, UserPlus, FileText, AlertCircle, Layers, FolderPlus, 
+  BookMarked, BookOpen, GraduationCap 
+} from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import { SkeletonTaskCard, SkeletonTable } from '../components/ui/Skeleton';
 
 export default function TeacherDashboard() {
   const { dbUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'groups'>('assignments');
+  const [activeTab, setActiveTab] = useState<'assignments' | 'students' | 'groups' | 'courses'>('assignments');
   const [tasks, setTasks] = useState<any[]>([]);
   const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
   const [groups, setGroups] = useState<DbGroup[]>([]);
+  const [courses, setCourses] = useState<DbCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -58,6 +68,19 @@ export default function TeacherDashboard() {
   const [submittingGroup, setSubmittingGroup] = useState(false);
   const [groupError, setGroupError] = useState('');
   const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+
+  // Course form state
+  const [showCreateCourse, setShowCreateCourse] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [submittingCourse, setSubmittingCourse] = useState(false);
+  const [courseFormData, setCourseFormData] = useState({
+    title: '',
+    description: '',
+    ieltsTrack: 'all' as 'academic' | 'general' | 'all',
+  });
+  const [courseError, setCourseError] = useState('');
+  const [courseSuccess, setCourseSuccess] = useState('');
+  const [deleteCourseData, setDeleteCourseData] = useState<{ id: string; title: string } | null>(null);
 
   const getTwoDaysFromNowString = () => {
     const d = new Date();
@@ -108,14 +131,16 @@ export default function TeacherDashboard() {
   const loadData = async () => {
     if (!dbUser) return;
     try {
-      const [t, st, grp] = await Promise.all([
+      const [t, st, grp, crs] = await Promise.all([
         getTasksForTeacher(dbUser.id),
         getTeacherStudents(dbUser.id),
-        getGroupsForTeacher(dbUser.id)
+        getGroupsForTeacher(dbUser.id),
+        getCoursesForTeacher(dbUser.id),
       ]);
       setTasks(t);
       setTeacherStudents(st);
       setGroups(grp);
+      setCourses(crs);
     } catch (err) {
       console.warn('Teacher dashboard load error:', err);
     } finally {
@@ -142,7 +167,7 @@ export default function TeacherDashboard() {
 
   const handleOpenStudentModal = () => {
     setEditingStudentId(null);
-    setStudentFormData({ name: '', username: '', password: '' });
+    setStudentFormData({ name: '', username: '', password: '', groupId: '' });
     setStudentError('');
     setShowCreateStudent(!showCreateStudent);
   };
@@ -160,6 +185,7 @@ export default function TeacherDashboard() {
           name: studentFormData.name,
           username: studentFormData.username,
           password: studentFormData.password || undefined,
+          groupId: studentFormData.groupId || null,
         });
         setStudentSuccess('Student credentials updated successfully');
       } else {
@@ -173,30 +199,31 @@ export default function TeacherDashboard() {
           username: studentFormData.username,
           password: studentFormData.password,
           role: 'student',
-          teacherId: dbUser!.id
+          teacherId: dbUser!.id,
+          groupId: studentFormData.groupId || null,
         });
         setStudentSuccess(`Student "${studentFormData.name}" registered under your account!`);
       }
 
       setShowCreateStudent(false);
       setEditingStudentId(null);
-      setStudentFormData({ name: '', username: '', password: '' });
+      setStudentFormData({ name: '', username: '', password: '', groupId: '' });
       await loadData();
       setTimeout(() => setStudentSuccess(''), 3500);
     } catch (err: any) {
-      setStudentError(err.message || 'Failed to save student account');
+      setStudentError(err.message || 'Failed to save student');
     } finally {
       setSubmittingStudent(false);
     }
   };
 
-  const handleStartEditStudent = (st: any) => {
-    setEditingStudentId(st.id);
+  const handleStartEditStudent = (student: any) => {
+    setEditingStudentId(student.id);
     setStudentFormData({
-      name: st.name,
-      username: st.username,
+      name: student.name,
+      username: student.username,
       password: '',
-      groupId: st.groupId || ''
+      groupId: student.groupId || ''
     });
     setStudentError('');
     setShowCreateStudent(true);
@@ -250,6 +277,68 @@ export default function TeacherDashboard() {
       await loadData();
     } catch (err) {
       console.error('Failed to assign student group:', err);
+    }
+  };
+
+  const handleOpenCourseModal = () => {
+    setEditingCourseId(null);
+    setCourseFormData({ title: '', description: '', ieltsTrack: 'all' });
+    setCourseError('');
+    setShowCreateCourse(!showCreateCourse);
+  };
+
+  const handleStartEditCourse = (course: DbCourse) => {
+    setEditingCourseId(course.id);
+    setCourseFormData({
+      title: course.title,
+      description: course.description || '',
+      ieltsTrack: course.ieltsTrack || 'all',
+    });
+    setCourseError('');
+    setShowCreateCourse(true);
+  };
+
+  const handleCreateOrUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submittingCourse || !dbUser) return;
+    setCourseError('');
+    setCourseSuccess('');
+    setSubmittingCourse(true);
+
+    try {
+      if (editingCourseId) {
+        await updateCourse(editingCourseId, courseFormData);
+        setCourseSuccess('Course curriculum updated successfully!');
+      } else {
+        await createCourse({
+          ...courseFormData,
+          teacherId: dbUser.id,
+        });
+        setCourseSuccess(`Course "${courseFormData.title}" created successfully!`);
+      }
+      setShowCreateCourse(false);
+      setEditingCourseId(null);
+      setCourseFormData({ title: '', description: '', ieltsTrack: 'all' });
+      await loadData();
+      setTimeout(() => setCourseSuccess(''), 3500);
+    } catch (err: any) {
+      setCourseError(err.message || 'Failed to save course');
+    } finally {
+      setSubmittingCourse(false);
+    }
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!deleteCourseData) return;
+    try {
+      await deleteCourse(deleteCourseData.id);
+      setCourseSuccess(`Course "${deleteCourseData.title}" deleted.`);
+      setDeleteCourseData(null);
+      await loadData();
+      setTimeout(() => setCourseSuccess(''), 3500);
+    } catch (err: any) {
+      setCourseError(err.message || 'Failed to delete course');
+      setDeleteCourseData(null);
     }
   };
 
@@ -308,7 +397,7 @@ export default function TeacherDashboard() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder={activeTab === 'assignments' ? "Search assignments..." : activeTab === 'students' ? "Search students..." : "Search groups..."} 
+              placeholder={activeTab === 'assignments' ? "Search assignments..." : activeTab === 'students' ? "Search students..." : activeTab === 'groups' ? "Search groups..." : "Search courses..."} 
               className="glass-input pl-9 pr-4 py-2 rounded-xl text-sm w-full sm:w-64"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
@@ -350,11 +439,21 @@ export default function TeacherDashboard() {
               New Class Group
             </button>
           )}
+
+          {activeTab === 'courses' && (
+            <button 
+              onClick={handleOpenCourseModal}
+              className="gradient-btn px-4 py-2 rounded-xl text-sm font-medium flex items-center justify-center shadow-lg whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Course
+            </button>
+          )}
         </div>
       </div>
 
       {/* Teacher Class Overview Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
           <div className="p-3 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
             <FileText className="w-6 h-6" />
@@ -393,13 +492,26 @@ export default function TeacherDashboard() {
             </div>
           </div>
         </div>
+
+        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
+          <div className="p-3 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30">
+            <BookMarked className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-medium block">Course Modules</span>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <strong className="text-2xl font-bold text-slate-100">{courses.length}</strong>
+              <span className="text-xs text-slate-500 font-medium">curriculums</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center space-x-2 border-b border-slate-800 pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('assignments')}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all whitespace-nowrap ${
             activeTab === 'assignments'
               ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
@@ -411,7 +523,7 @@ export default function TeacherDashboard() {
 
         <button
           onClick={() => setActiveTab('students')}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all whitespace-nowrap ${
             activeTab === 'students'
               ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
@@ -423,7 +535,7 @@ export default function TeacherDashboard() {
 
         <button
           onClick={() => setActiveTab('groups')}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all whitespace-nowrap ${
             activeTab === 'groups'
               ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
@@ -431,6 +543,18 @@ export default function TeacherDashboard() {
         >
           <Layers className="w-4 h-4 mr-2" />
           My Groups ({groups.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('courses')}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold flex items-center transition-all whitespace-nowrap ${
+            activeTab === 'courses'
+              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 mr-2" />
+          Courses ({courses.length})
         </button>
       </div>
 
@@ -1013,6 +1137,152 @@ export default function TeacherDashboard() {
       </div>
       )}
 
+      {/* ================= COURSES TAB ================= */}
+      {activeTab === 'courses' && (
+        <div className="space-y-6">
+          {showCreateCourse && (
+            <motion.form 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              onSubmit={handleCreateOrUpdateCourse}
+              className="glass-card p-6 rounded-2xl space-y-4 border border-indigo-500/30"
+            >
+              <h3 className="text-lg font-semibold border-b border-slate-800 pb-3 flex items-center">
+                <BookOpen className="w-5 h-5 mr-2 text-indigo-400" />
+                {editingCourseId ? 'Edit Course Curriculum' : 'Create New Course Track'}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Course Title</label>
+                  <input 
+                    type="text" 
+                    required 
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                    placeholder="e.g. IELTS Academic Writing Band 7.5+ Intensive"
+                    value={courseFormData.title}
+                    onChange={e => setCourseFormData({ ...courseFormData, title: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">IELTS Track / Target</label>
+                  <select 
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm appearance-none bg-slate-900"
+                    value={courseFormData.ieltsTrack}
+                    onChange={e => setCourseFormData({ ...courseFormData, ieltsTrack: e.target.value as any })}
+                  >
+                    <option value="all">Comprehensive (Academic & General)</option>
+                    <option value="academic">Academic IELTS Only</option>
+                    <option value="general">General Training IELTS Only</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Curriculum Description & Syllabus Goals</label>
+                  <textarea 
+                    rows={3}
+                    className="w-full glass-input px-4 py-2 rounded-xl text-sm"
+                    placeholder="e.g. Master Task 1 visual reports (graphs, maps, processes) and Task 2 argumentative essays with band 8 vocabulary and coherent linking devices."
+                    value={courseFormData.description}
+                    onChange={e => setCourseFormData({ ...courseFormData, description: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowCreateCourse(false); setEditingCourseId(null); }}
+                  className="px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submittingCourse}
+                  className="gradient-btn px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-60"
+                >
+                  {submittingCourse ? 'Saving...' : editingCourseId ? 'Save Changes' : 'Create Course'}
+                </button>
+              </div>
+            </motion.form>
+          )}
+
+          {courses.length === 0 && !loading ? (
+            <div className="glass-card p-12 rounded-3xl text-center border border-slate-800">
+              <BookOpen className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+              <h3 className="text-lg font-bold text-slate-200 mb-1">No Courses Created Yet</h3>
+              <p className="text-sm text-slate-400 max-w-md mx-auto mb-6">
+                Organize your IELTS assignments into structured curriculum tracks (e.g. Band 7+ Intensive or Task 1 Masterclass).
+              </p>
+              <button
+                onClick={handleOpenCourseModal}
+                className="gradient-btn px-5 py-2.5 rounded-xl text-sm font-medium inline-flex items-center shadow-lg"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create First Course
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {courses.map(c => (
+                <motion.div 
+                  key={c.id} 
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass-card p-6 rounded-2xl flex flex-col justify-between border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative group"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                        <GraduationCap className="w-5 h-5" />
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                        c.ieltsTrack === 'academic'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : c.ieltsTrack === 'general'
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}>
+                        {c.ieltsTrack === 'all' ? 'All Tracks' : c.ieltsTrack}
+                      </span>
+                    </div>
+
+                    <h3 className="font-bold text-lg text-slate-100 mb-2">{c.title}</h3>
+                    <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed mb-4">
+                      {c.description || 'Structured IELTS writing preparation curriculum.'}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-800/80 pt-4 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Created: {new Date(c.createdAt).toLocaleDateString()}
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => handleStartEditCourse(c)}
+                        className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+                        title="Edit Course"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setDeleteCourseData({ id: c.id, title: c.title })}
+                        className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded-lg hover:bg-red-500/10"
+                        title="Delete Course"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <ConfirmModal 
         isOpen={deleteTaskId !== null}
         title="Delete Assignment"
@@ -1044,6 +1314,17 @@ export default function TeacherDashboard() {
         variant="danger"
         onConfirm={handleDeleteGroup}
         onCancel={() => setDeleteGroupId(null)}
+      />
+
+      <ConfirmModal 
+        isOpen={deleteCourseData !== null}
+        title="Delete Course"
+        message={`Are you sure you want to delete the course "${deleteCourseData?.title}"?`}
+        confirmText="Delete Course"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleDeleteCourse}
+        onCancel={() => setDeleteCourseData(null)}
       />
     </div>
   );

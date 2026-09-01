@@ -29,14 +29,40 @@ export interface DbUser {
   email: string | null;
   passwordHash: string; // simple hash for username/password auth
   role: 'student' | 'teacher' | 'admin';
+  centerId?: string | null;  // Education Center ID
   groupId?: string | null;   // Student's assigned group ID
   teacherId?: string | null; // Student's assigned/linked teacher ID
   createdAt: Date;
 }
 
+export interface DbCenter {
+  id: string;
+  name: string;
+  code: string;
+  address?: string | null;
+  status: 'active' | 'archived';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DbCourse {
+  id: string;
+  centerId?: string | null;
+  teacherId?: string | null;
+  title: string;
+  description?: string | null;
+  ieltsTrack: 'academic' | 'general' | 'all';
+  taskCount?: number;
+  status: 'active' | 'archived';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface DbTask {
   id: string;
   teacherId: string;
+  centerId?: string | null; // Education Center ID
+  courseId?: string | null; // Linked Course ID
   groupId?: string | null;  // Group ID this task is assigned to
   title: string;
   ieltsType: string;         // 'task1' | 'task2' | 'mock'
@@ -326,6 +352,166 @@ export async function deleteGroup(id: string): Promise<void> {
   }
   // Delete group
   await deleteDoc(doc(firestore, 'groups', id));
+}
+
+// ============== EDUCATION CENTERS ==============
+
+const centersCol = () => collection(firestore, 'centers');
+
+let cachedCenters: { centers: DbCenter[]; fetchedAt: number } | null = null;
+
+export async function getAllCenters(): Promise<DbCenter[]> {
+  const now = Date.now();
+  if (cachedCenters && (now - cachedCenters.fetchedAt < 5000)) {
+    return cachedCenters.centers;
+  }
+  try {
+    const snap = await getDocs(query(centersCol(), orderBy('createdAt', 'desc')));
+    const centers = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbCenter));
+    cachedCenters = { centers, fetchedAt: now };
+    return centers;
+  } catch (e) {
+    if (cachedCenters) return cachedCenters.centers;
+    throw e;
+  }
+}
+
+export async function getCenterById(id: string): Promise<DbCenter | null> {
+  try {
+    const d = await getDoc(doc(firestore, 'centers', id));
+    if (!d.exists()) return null;
+    return {
+      id: d.id,
+      ...d.data(),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbCenter;
+  } catch (e) {
+    console.warn('Center fetch error:', e);
+    return null;
+  }
+}
+
+export async function createCenter(data: { name: string; code: string; address?: string | null }): Promise<DbCenter> {
+  cachedCenters = null;
+  const now = new Date();
+  const docRef = await addDoc(centersCol(), {
+    name: data.name.trim(),
+    code: data.code.trim().toUpperCase(),
+    address: data.address?.trim() || null,
+    status: 'active',
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+  });
+  return {
+    id: docRef.id,
+    name: data.name.trim(),
+    code: data.code.trim().toUpperCase(),
+    address: data.address?.trim() || null,
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateCenter(id: string, data: Partial<{ name: string; code: string; address?: string | null; status: 'active' | 'archived' }>): Promise<DbCenter> {
+  cachedCenters = null;
+  const now = new Date();
+  const updatePayload: any = { updatedAt: Timestamp.fromDate(now) };
+  if (data.name !== undefined) updatePayload.name = data.name.trim();
+  if (data.code !== undefined) updatePayload.code = data.code.trim().toUpperCase();
+  if (data.address !== undefined) updatePayload.address = data.address?.trim() || null;
+  if (data.status !== undefined) updatePayload.status = data.status;
+
+  await updateDoc(doc(firestore, 'centers', id), updatePayload);
+  return (await getCenterById(id))!;
+}
+
+export async function deleteCenter(id: string): Promise<void> {
+  cachedCenters = null;
+  await deleteDoc(doc(firestore, 'centers', id));
+}
+
+// ============== COURSES & CURRICULUM ==============
+
+const coursesCol = () => collection(firestore, 'courses');
+
+let cachedCourses: { courses: DbCourse[]; fetchedAt: number } | null = null;
+
+export async function getAllCourses(): Promise<DbCourse[]> {
+  const now = Date.now();
+  if (cachedCourses && (now - cachedCourses.fetchedAt < 5000)) {
+    return cachedCourses.courses;
+  }
+  try {
+    const snap = await getDocs(query(coursesCol(), orderBy('createdAt', 'desc')));
+    const courses = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: toDateRequired(d.data().createdAt),
+      updatedAt: toDateRequired(d.data().updatedAt),
+    } as DbCourse));
+    cachedCourses = { courses, fetchedAt: now };
+    return courses;
+  } catch (e) {
+    if (cachedCourses) return cachedCourses.courses;
+    throw e;
+  }
+}
+
+export async function getCoursesForTeacher(teacherId: string): Promise<DbCourse[]> {
+  const all = await getAllCourses();
+  return all.filter(c => (c.teacherId === teacherId || !c.teacherId) && c.status !== 'archived');
+}
+
+export async function createCourse(data: { title: string; description?: string | null; centerId?: string | null; teacherId?: string | null; ieltsTrack?: 'academic' | 'general' | 'all' }): Promise<DbCourse> {
+  cachedCourses = null;
+  const now = new Date();
+  const docRef = await addDoc(coursesCol(), {
+    title: data.title.trim(),
+    description: data.description?.trim() || null,
+    centerId: data.centerId || null,
+    teacherId: data.teacherId || null,
+    ieltsTrack: data.ieltsTrack || 'all',
+    status: 'active',
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+  });
+  return {
+    id: docRef.id,
+    title: data.title.trim(),
+    description: data.description?.trim() || null,
+    centerId: data.centerId || null,
+    teacherId: data.teacherId || null,
+    ieltsTrack: data.ieltsTrack || 'all',
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateCourse(id: string, data: Partial<{ title: string; description?: string | null; ieltsTrack?: 'academic' | 'general' | 'all'; status: 'active' | 'archived' }>): Promise<DbCourse> {
+  cachedCourses = null;
+  const now = new Date();
+  const updatePayload: any = { updatedAt: Timestamp.fromDate(now) };
+  if (data.title !== undefined) updatePayload.title = data.title.trim();
+  if (data.description !== undefined) updatePayload.description = data.description?.trim() || null;
+  if (data.ieltsTrack !== undefined) updatePayload.ieltsTrack = data.ieltsTrack;
+  if (data.status !== undefined) updatePayload.status = data.status;
+
+  await updateDoc(doc(firestore, 'courses', id), updatePayload);
+  const updated = (await getAllCourses()).find(c => c.id === id);
+  return updated!;
+}
+
+export async function deleteCourse(id: string): Promise<void> {
+  cachedCourses = null;
+  await deleteDoc(doc(firestore, 'courses', id));
 }
 
 export async function getTeacherStudents(teacherId: string): Promise<DbUser[]> {
