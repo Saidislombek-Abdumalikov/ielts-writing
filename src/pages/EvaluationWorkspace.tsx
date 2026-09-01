@@ -303,6 +303,11 @@ export default function EvaluationWorkspace() {
   }
 
   const notSubmittedCount = totalStudents - submittedCount;
+  const gradedSubs = submissionsList.filter(s => s.submission.status === 'graded');
+  const validScores = gradedSubs.map(s => parseFloat(s.submission.feedback?.bandScore)).filter(s => !isNaN(s) && s > 0);
+  const avgTestBandScore = validScores.length > 0 
+    ? (validScores.reduce((acc, s) => acc + s, 0) / validScores.length).toFixed(1) 
+    : null;
 
   return (
     <div className="space-y-6 animate-fade-up w-full max-w-[95%] lg:max-w-[90%] mx-auto pt-8 sm:pt-12 pb-12 px-2 sm:px-4">
@@ -339,10 +344,10 @@ export default function EvaluationWorkspace() {
       </div>
 
       {/* Submission Roster Summary Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="glass-card p-4 rounded-2xl flex items-center justify-between border-indigo-500/20">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Total Registered Students</p>
+            <p className="text-xs text-slate-400 font-medium">Enrolled Students</p>
             <p className="text-2xl font-bold text-slate-100">{totalStudents}</p>
           </div>
           <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl">
@@ -360,13 +365,25 @@ export default function EvaluationWorkspace() {
           </div>
         </div>
 
+        <div className="glass-card p-4 rounded-2xl flex items-center justify-between border-purple-500/20">
+          <div>
+            <p className="text-xs text-slate-400 font-medium">Graded Submissions</p>
+            <p className="text-2xl font-bold text-purple-300">{gradedSubs.length}</p>
+          </div>
+          <div className="p-3 bg-purple-500/10 text-purple-400 rounded-xl">
+            <Award className="w-5 h-5" />
+          </div>
+        </div>
+
         <div className="glass-card p-4 rounded-2xl flex items-center justify-between border-amber-500/20">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Not Submitted Yet</p>
-            <p className="text-2xl font-bold text-amber-400">{notSubmittedCount > 0 ? notSubmittedCount : 0}</p>
+            <p className="text-xs text-slate-400 font-medium">{avgTestBandScore ? 'Average Band Score' : 'Not Submitted Yet'}</p>
+            <p className="text-2xl font-bold text-amber-400">
+              {avgTestBandScore ? `Band ${avgTestBandScore}` : notSubmittedCount > 0 ? notSubmittedCount : 0}
+            </p>
           </div>
           <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl">
-            <UserX className="w-5 h-5" />
+            <Sparkles className="w-5 h-5" />
           </div>
         </div>
       </div>
