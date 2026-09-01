@@ -1,7 +1,8 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { useTheme } from '../components/ThemeContext';
-import { Shield, BookOpen, PenTool, Sun, Moon, Loader2 } from 'lucide-react';
+import { getAllCenters, DbCenter } from '../lib/db';
+import { Shield, BookOpen, PenTool, Sun, Moon, Loader2, Building2, CheckCircle2 } from 'lucide-react';
 
 const TeacherDashboard = lazy(() => import('./TeacherDashboard'));
 const StudentDashboard = lazy(() => import('./StudentDashboard'));
@@ -20,6 +21,18 @@ export default function Dashboard() {
   const { dbUser, signOut, isImpersonating, exitImpersonation } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [adminTab, setAdminTab] = useState<'teacher' | 'student' | 'admin'>('admin');
+  const [userCenter, setUserCenter] = useState<DbCenter | null>(null);
+
+  useEffect(() => {
+    if (dbUser?.centerId) {
+      getAllCenters().then(centers => {
+        const found = centers.find(c => c.id === dbUser.centerId);
+        if (found) setUserCenter(found);
+      }).catch(console.warn);
+    } else {
+      setUserCenter(null);
+    }
+  }, [dbUser?.centerId]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -83,10 +96,22 @@ export default function Dashboard() {
             )}
           </button>
 
-          <span className="text-sm text-slate-300 capitalize font-medium flex items-center">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>
-            {dbUser?.name} ({dbUser?.role})
-          </span>
+          {userCenter && (
+            <span className="text-xs px-2.5 py-1 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-medium flex items-center">
+              <Building2 className="w-3.5 h-3.5 mr-1" />
+              {userCenter.name}
+            </span>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-slate-300 capitalize font-medium flex items-center">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>
+              {dbUser?.name}
+            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold uppercase bg-slate-800 text-slate-400 border border-slate-700">
+              {dbUser?.role}
+            </span>
+          </div>
           
           <button 
             onClick={signOut}
