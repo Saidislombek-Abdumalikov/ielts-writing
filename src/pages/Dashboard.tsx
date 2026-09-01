@@ -1,10 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { useTheme } from '../components/ThemeContext';
-import TeacherDashboard from './TeacherDashboard';
-import StudentDashboard from './StudentDashboard';
-import AdminDashboard from './AdminDashboard';
-import { Shield, BookOpen, PenTool, Sun, Moon } from 'lucide-react';
+import { Shield, BookOpen, PenTool, Sun, Moon, Loader2 } from 'lucide-react';
+
+const TeacherDashboard = lazy(() => import('./TeacherDashboard'));
+const StudentDashboard = lazy(() => import('./StudentDashboard'));
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+
+function SubDashboardFallback() {
+  return (
+    <div className="flex items-center justify-center py-20 text-slate-400">
+      <Loader2 className="w-6 h-6 animate-spin text-indigo-400 mr-2" />
+      <span className="text-xs font-medium">Loading workspace panel...</span>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { dbUser, signOut } = useAuth();
@@ -75,19 +85,21 @@ export default function Dashboard() {
       </header>
       
       <main className="flex-1 p-4 sm:p-6 pt-6 sm:pt-10 w-full max-w-[95%] lg:max-w-[90%] mx-auto">
-        {dbUser?.role === 'admin' && (
-          <>
-            {adminTab === 'teacher' && <TeacherDashboard />}
-            {adminTab === 'student' && <StudentDashboard />}
-            {adminTab === 'admin' && <AdminDashboard />}
-          </>
-        )}
+        <Suspense fallback={<SubDashboardFallback />}>
+          {dbUser?.role === 'admin' && (
+            <>
+              {adminTab === 'teacher' && <TeacherDashboard />}
+              {adminTab === 'student' && <StudentDashboard />}
+              {adminTab === 'admin' && <AdminDashboard />}
+            </>
+          )}
 
-        {dbUser?.role === 'teacher' && (
-          <TeacherDashboard />
-        )}
+          {dbUser?.role === 'teacher' && (
+            <TeacherDashboard />
+          )}
 
-        {dbUser?.role === 'student' && <StudentDashboard />}
+          {dbUser?.role === 'student' && <StudentDashboard />}
+        </Suspense>
       </main>
     </div>
   );
