@@ -27,6 +27,7 @@ export default function AdminDashboard() {
   const [deleteCenterData, setDeleteCenterData] = useState<{ id: string; name: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'teacher' | 'admin'>('all');
+  const [centerFilter, setCenterFilter] = useState<string>('all');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -79,7 +80,13 @@ export default function AdminDashboard() {
     const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           u.username.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesCenter = centerFilter === 'all' 
+      ? true 
+      : centerFilter === 'none' 
+      ? !u.centerId 
+      : u.centerId === centerFilter;
+
+    return matchesSearch && matchesRole && matchesCenter;
   });
 
   const handleOpenCreateModal = () => {
@@ -360,6 +367,22 @@ export default function AdminDashboard() {
           >
             Admins ({usersList.filter(u => u.role === 'admin').length})
           </button>
+
+          {centersList.length > 0 && (
+            <select
+              value={centerFilter}
+              onChange={e => setCenterFilter(e.target.value)}
+              className="glass-input px-3 py-1.5 rounded-xl text-xs bg-slate-900 appearance-none text-slate-300 border border-slate-700 ml-0 sm:ml-2"
+            >
+              <option value="all">🏢 All Learning Centers</option>
+              <option value="none">Independent / Unassigned</option>
+              {centersList.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.code})
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="relative">
@@ -714,44 +737,53 @@ export default function AdminDashboard() {
                 <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider bg-slate-900/60">
                   <th className="px-6 py-4 font-medium">Center Name</th>
                   <th className="px-6 py-4 font-medium">Code</th>
+                  <th className="px-6 py-4 font-medium">Teachers</th>
+                  <th className="px-6 py-4 font-medium">Students</th>
                   <th className="px-6 py-4 font-medium">Location</th>
                   <th className="px-6 py-4 font-medium">Status</th>
                   <th className="px-6 py-4 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {centersList.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-slate-200 flex items-center space-x-2">
-                      <Building2 className="w-4 h-4 text-indigo-400" />
-                      <span>{c.name}</span>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs text-indigo-300 font-semibold">{c.code}</td>
-                    <td className="px-6 py-4 text-slate-400 text-xs">{c.address || '—'}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
-                        Active
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
-                      <button 
-                        onClick={() => handleStartEditCenter(c)}
-                        className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
-                        title="Edit Center"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
+                {centersList.map(c => {
+                  const centerTeachers = usersList.filter(u => u.centerId === c.id && u.role === 'teacher').length;
+                  const centerStudents = usersList.filter(u => u.centerId === c.id && u.role === 'student').length;
 
-                      <button 
-                        onClick={() => setDeleteCenterData({ id: c.id, name: c.name })}
-                        className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded-lg hover:bg-red-500/10"
-                        title="Delete Center"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                  return (
+                    <tr key={c.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4 font-semibold text-slate-200 flex items-center space-x-2">
+                        <Building2 className="w-4 h-4 text-indigo-400" />
+                        <span>{c.name}</span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-xs text-indigo-300 font-semibold">{c.code}</td>
+                      <td className="px-6 py-4 text-slate-300 text-xs font-semibold">{centerTeachers} staff</td>
+                      <td className="px-6 py-4 text-slate-300 text-xs font-semibold">{centerStudents} enrolled</td>
+                      <td className="px-6 py-4 text-slate-400 text-xs">{c.address || '—'}</td>
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                          Active
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right flex items-center justify-end space-x-3">
+                        <button 
+                          onClick={() => handleStartEditCenter(c)}
+                          className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+                          title="Edit Center"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+
+                        <button 
+                          onClick={() => setDeleteCenterData({ id: c.id, name: c.name })}
+                          className="text-red-400 hover:text-red-300 transition-colors p-1.5 rounded-lg hover:bg-red-500/10"
+                          title="Delete Center"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {centersList.length === 0 && !loading && (
                   <tr>

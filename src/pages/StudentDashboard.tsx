@@ -16,6 +16,7 @@ export default function StudentDashboard() {
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [syncedBanner, setSyncedBanner] = useState('');
   const [feedbackModalTask, setFeedbackModalTask] = useState<any>(null);
+  const [showScoreHistoryModal, setShowScoreHistoryModal] = useState(false);
   const navigate = useNavigate();
 
   const loadStudentTasks = async () => {
@@ -109,21 +110,35 @@ export default function StudentDashboard() {
 
       {/* Student Analytics Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
-          <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            <Trophy className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-400 font-medium block">Average Band Score</span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <strong className="text-2xl font-bold text-slate-100">
-                {avgBandScore ? `Band ${avgBandScore}` : '—'}
-              </strong>
-              {avgBandScore && (
-                <span className="text-[11px] text-slate-500 font-normal">({gradedTasksCount} graded)</span>
-              )}
+        <div 
+          onClick={() => { if (gradedTasksCount > 0) setShowScoreHistoryModal(true); }}
+          className={`glass-card p-4 sm:p-5 rounded-2xl flex items-center justify-between border border-slate-800 transition-all ${
+            gradedTasksCount > 0 ? 'cursor-pointer hover:border-amber-500/40 hover:bg-slate-800/40' : ''
+          }`}
+          title={gradedTasksCount > 0 ? "Click to view complete band score progression" : undefined}
+        >
+          <div className="flex items-center space-x-4">
+            <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <Trophy className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="text-xs text-slate-400 font-medium block">Average Band Score</span>
+              <div className="flex items-baseline space-x-1.5 mt-0.5">
+                <strong className="text-2xl font-bold text-slate-100">
+                  {avgBandScore ? `Band ${avgBandScore}` : '—'}
+                </strong>
+                {avgBandScore && (
+                  <span className="text-[11px] text-slate-500 font-normal">({gradedTasksCount} graded)</span>
+                )}
+              </div>
             </div>
           </div>
+
+          {gradedTasksCount > 0 && (
+            <span className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-xl flex items-center shrink-0">
+              History →
+            </span>
+          )}
         </div>
 
         <div className="glass-card p-4 sm:p-5 rounded-2xl flex items-center space-x-4 border border-slate-800">
@@ -393,6 +408,115 @@ export default function StudentDashboard() {
               >
                 <span>Open Full Exam Workspace</span>
                 <ArrowRight className="w-4 h-4 ml-1.5" />
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* IELTS Band Score History & Progression Modal */}
+      {showScoreHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card max-w-2xl w-full p-6 rounded-3xl border border-slate-700 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex justify-between items-start">
+              <div className="flex items-center space-x-3">
+                <span className="p-3 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/30">
+                  <Trophy className="w-6 h-6" />
+                </span>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-100">IELTS Band Score Progression</h3>
+                  <p className="text-xs text-slate-400">Complete historical breakdown of your evaluated writing exams</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowScoreHistoryModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Metrics Overview */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium block">Average Band</span>
+                <strong className="text-xl font-bold text-amber-400">Band {avgBandScore || '—'}</strong>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium block">Highest Score</span>
+                <strong className="text-xl font-bold text-emerald-400">
+                  {validScores.length > 0 ? `Band ${Math.max(...validScores)}` : '—'}
+                </strong>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium block">Graded Tests</span>
+                <strong className="text-xl font-bold text-indigo-400">{gradedTasksCount}</strong>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium block">Total Words</span>
+                <strong className="text-xl font-bold text-slate-200">{totalWordsWritten.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            {/* Historical Score Table */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Exam Results History</h4>
+              <div className="rounded-2xl border border-slate-800 overflow-hidden">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-900/60 text-slate-400 uppercase font-medium">
+                      <th className="px-4 py-3">Assignment</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Words</th>
+                      <th className="px-4 py-3">Assessed Band</th>
+                      <th className="px-4 py-3 text-right">Feedback</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {gradedTasks.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-200 max-w-[180px] truncate">
+                          {t.title}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 uppercase">
+                          {t.ieltsType === 'mock' ? 'Mock Exam' : t.ieltsType}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">
+                          {t.submission?.wordCount || 0}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2.5 py-1 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Band {t.submission?.feedback?.bandScore || '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => {
+                              setShowScoreHistoryModal(false);
+                              setFeedbackModalTask(t);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 font-medium transition-colors"
+                          >
+                            View Comments
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={() => setShowScoreHistoryModal(false)}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+              >
+                Close History
               </button>
             </div>
           </motion.div>
