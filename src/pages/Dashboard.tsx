@@ -17,12 +17,25 @@ function SubDashboardFallback() {
 }
 
 export default function Dashboard() {
-  const { dbUser, signOut } = useAuth();
+  const { dbUser, signOut, isImpersonating, exitImpersonation } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [adminTab, setAdminTab] = useState<'teacher' | 'student' | 'admin'>('admin');
 
   return (
     <div className="flex-1 flex flex-col">
+      {isImpersonating && (
+        <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2 text-xs text-amber-200 flex items-center justify-between z-50">
+          <span className="flex items-center font-medium">
+            <span className="mr-2">🕶️</span> Viewing workspace as <strong>&nbsp;{dbUser?.name}&nbsp;</strong> ({dbUser?.role})
+          </span>
+          <button
+            onClick={exitImpersonation}
+            className="px-3 py-1 bg-amber-500/30 hover:bg-amber-500/50 text-amber-100 font-semibold rounded-lg transition-colors"
+          >
+            Exit Impersonation
+          </button>
+        </div>
+      )}
       <header className="glass-header px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-40">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-bold gradient-text">IELTS Workspace</h1>
